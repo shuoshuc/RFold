@@ -9,8 +9,9 @@ class SimpleUUID:
         self.current = 0
 
     def fetch(self):
+        curr_id = self.current
         self.current += 1
-        return self.current
+        return curr_id
 
 if __name__ == "__main__":
     generator = SimpleUUID()

@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import ast
 import copy
 import numpy as np
-from dataclasses import dataclass
 from scipy.stats import rv_discrete
-from typing import Tuple
 
+from job import TopoType, Job
 from simpleUUID import SimpleUUID
 
 TPU_JOB_SIZES_DIST = 'data/tpu_job_size.txt'
 TPU_ARRIVAL_TIME_DIST = 'data/tpu_arrival_time.txt'
-
-@dataclass
-class Job():
-    uuid: int
-    # Shape should appear as a tuple of (x, y, z), assuming 3D Torus.
-    shape: Tuple[int, int, int]
-    twisted: bool
-    size: int
 
 class WorkloadGenerator:
     '''
@@ -31,6 +21,7 @@ class WorkloadGenerator:
             raise RuntimeError('Distribution files are not provided')
         # Job size is modeled by `self.rv_size`.
         # Job inter-arrival time is modeled by `self.rv_iat`, in seconds.
+        self.abs_time_sec = 0
         self._loadSizeDist(job_size_file)
         self._loadIATDist(arrival_time_file)
         self.uuidgen = SimpleUUID()
@@ -46,13 +37,12 @@ class WorkloadGenerator:
                 # Skips the comment line.
                 if line.startswith('#'):
                     continue
-                jid, slice_shape, twisted, job_size, p = line.strip().split(',')
+                jid, slice_shape, topo_type, job_size, p = line.strip().split(',')
                 # Random variable only needs a list of values and their probabilities.
                 # Hence, the specific job info is tracked by the `self.jobs` dict.
                 self.dist_size.append([int(jid), float(p) / 100])
-                shape_tup = tuple(map(int, slice_shape.split('x')))
-                self.jobs[int(jid)] = Job(uuid=0, shape=shape_tup,
-                                          twisted=ast.literal_eval(twisted.capitalize()),
+                self.jobs[int(jid)] = Job(uuid=0, topology=TopoType[topo_type],
+                                          shape=tuple(map(int, slice_shape.split('x'))),
                                           size=int(job_size))
         slice_ids, probs = zip(*self.dist_size)
         # If the distribution does not add up to 1, normalize it.
@@ -91,7 +81,9 @@ class WorkloadGenerator:
             j = self.rv_size.rvs(size=1)[0]
             new_job = copy.deepcopy(self.jobs[j])
             new_job.uuid = self.uuidgen.fetch()
-            jobs.append((iat, new_job))
+            new_job.arrival_time_sec = self.abs_time_sec
+            self.abs_time_sec += iat
+            jobs.append(new_job)
         return jobs
 
 def main():
