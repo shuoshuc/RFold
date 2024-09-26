@@ -4,46 +4,68 @@
 import copy
 import numpy as np
 from scipy.stats import rv_discrete
+from io import StringIO
 
-from job import TopoType, Job
-from simpleUUID import SimpleUUID
+from common.job import TopoType, Job
+from common.simpleUUID import SimpleUUID
 
-TPU_JOB_SIZES_DIST = 'data/tpu_job_size.txt'
-TPU_ARRIVAL_TIME_DIST = 'data/tpu_arrival_time.txt'
 
 class WorkloadGenerator:
     '''
     A workload generator class that fits the given probability distribution.
     It can generate workloads following the given distribution.
     '''
-    def __init__(self, job_size_file, arrival_time_file):
-        if not job_size_file or not arrival_time_file:
+
+    def __init__(self, arrival_time_file, job_size_file):
+        if not arrival_time_file or not job_size_file:
             raise RuntimeError('Distribution files are not provided')
-        # Job size is modeled by `self.rv_size`.
         # Job inter-arrival time is modeled by `self.rv_iat`, in seconds.
+        # Job size is modeled by `self.rv_size`.
         self.abs_time_sec = 0
-        self._loadSizeDist(job_size_file)
         self._loadIATDist(arrival_time_file)
+        self._loadSizeDist(job_size_file)
         self.uuidgen = SimpleUUID()
 
     def _loadSizeDist(self, filename):
         '''
-        Loads the given job size csv file and parses it into a distribution (PDF).
+        Loads the given job size csv file (or a StringIO equivalent) and
+        parses it into a distribution (PDF).
+
+        Assumption: The job size distribution can contain duplicates, i.e.,
+        multiple entries with the same (topology, shape, size, duration) tuple.
+        During parsing, the duplicates are de-duplicated and the probabilities are summed up.
         '''
         self.dist_size = []
+        accumulated_prob = {}
         self.jobs = {}
-        with open(filename, 'r', encoding='utf-8') as f:
-            for line in f.readlines():
-                # Skips the comment line.
-                if line.startswith('#'):
-                    continue
-                jid, slice_shape, topo_type, job_size, p = line.strip().split(',')
-                # Random variable only needs a list of values and their probabilities.
-                # Hence, the specific job info is tracked by the `self.jobs` dict.
-                self.dist_size.append([int(jid), float(p) / 100])
-                self.jobs[int(jid)] = Job(uuid=0, topology=TopoType[topo_type],
-                                          shape=tuple(map(int, slice_shape.split('x'))),
-                                          size=int(job_size))
+
+        is_file = not isinstance(filename, StringIO)
+        f = filename
+        if is_file:
+            f = open(filename, 'r', encoding='utf-8')
+        # with open(filename, 'r', encoding='utf-8') as f:
+        for line in f.readlines():
+            # Skips the comment line.
+            if line.startswith('#'):
+                continue
+            _, topo_type, slice_shape, job_size, dur_min, p = line.strip().split(',')
+            job_key = (TopoType[topo_type], slice_shape,
+                       int(job_size), float(dur_min))
+            new_prob = accumulated_prob.setdefault(job_key, 0) + float(p)
+            accumulated_prob[job_key] = new_prob
+        if is_file:
+            f.close()
+        for i, (job_key, p) in enumerate(accumulated_prob.items()):
+            topology, slice_shape, job_size, duration = job_key
+            # Random variable only needs a list of values and their probabilities.
+            # Hence, the specific job info is tracked by the `self.jobs` dict.
+            self.dist_size.append([i, float(p) / 100])
+            # Torus shape is separated by 'x', while Clos shape is separated by '+'.
+            shape_delim = '+' if topology == TopoType.CLOS else 'x'
+            self.jobs[i] = Job(uuid=0, topology=topology,
+                               shape=tuple(
+                                   map(int, slice_shape.split(shape_delim))),
+                               size=int(job_size), duration_minutes=duration)
         slice_ids, probs = zip(*self.dist_size)
         # If the distribution does not add up to 1, normalize it.
         # E.g., this happens in Table 2 of Google's TPUv4 paper (ISCA'23).
@@ -53,18 +75,24 @@ class WorkloadGenerator:
 
     def _loadIATDist(self, filename):
         '''
-        Loads the given job inter-arrival time (IAT) csv file and
-        parses it into a distribution (PDF).
+        Loads the given job inter-arrival time (IAT) csv file (or a StringIO equivalent)
+        and parses it into a distribution (PDF).
         '''
         self.dist_iat = {}
-        with open(filename, 'r', encoding='utf-8') as f:
-            for line in f.readlines():
-                # Skips the comment line.
-                if line.startswith('#'):
-                    continue
-                iat_sec, p = map(float, line.strip().split(','))
-                new_prob = self.dist_iat.setdefault(iat_sec, 0) + p
-                self.dist_iat[iat_sec] = new_prob
+
+        is_file = not isinstance(filename, StringIO)
+        f = filename
+        if is_file:
+            f = open(filename, 'r', encoding='utf-8')
+        for line in f.readlines():
+            # Skips the comment line.
+            if line.startswith('#'):
+                continue
+            iat_sec, p = map(float, line.strip().split(','))
+            new_prob = self.dist_iat.setdefault(iat_sec, 0) + p
+            self.dist_iat[iat_sec] = new_prob
+        if is_file:
+            f.close()
         iats, probs = zip(*self.dist_iat.items())
         # If the distribution does not add up to 1, normalize it.
         if sum(probs) != 1:
@@ -85,14 +113,3 @@ class WorkloadGenerator:
             self.abs_time_sec += iat
             jobs.append(new_job)
         return jobs
-
-def main():
-    size_dist, arrival_time = TPU_JOB_SIZES_DIST, TPU_ARRIVAL_TIME_DIST
-    wgen = WorkloadGenerator(size_dist, arrival_time)
-    samples = wgen.run(10)
-    for sample in samples:
-        print(sample)
-    print(wgen.run())
-
-if __name__ == "__main__":
-    main()
