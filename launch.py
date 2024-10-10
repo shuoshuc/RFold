@@ -7,7 +7,7 @@ from WorkloadGen.trace import TraceReplay
 TPU_JOB_SIZES_DIST = 'WorkloadGen/data/tpu_job_size.txt'
 TPU_ARRIVAL_TIME_DIST = 'WorkloadGen/data/tpu_arrival_time.txt'
 PHILLY_TRACE = 'WorkloadGen/data/philly_trace.csv'
-ALIBABA_TRACE = 'WorkloadGen/data/alibaba-v2020.csv'
+ALIBABA_TRACE = 'WorkloadGen/data/alibaba_v2020.csv'
 
 
 def main():
