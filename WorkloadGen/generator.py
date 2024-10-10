@@ -6,7 +6,7 @@ import numpy as np
 from scipy.stats import rv_discrete
 from io import StringIO
 
-from common.job import TopoType, Job
+from common.job import TopoType, Job, SplitShape
 from common.simpleUUID import SimpleUUID
 
 
@@ -43,29 +43,26 @@ class WorkloadGenerator:
         f = filename
         if is_file:
             f = open(filename, 'r', encoding='utf-8')
-        # with open(filename, 'r', encoding='utf-8') as f:
         for line in f.readlines():
             # Skips the comment line.
             if line.startswith('#'):
                 continue
             _, topo_type, slice_shape, job_size, dur_min, p = line.strip().split(',')
             job_key = (TopoType[topo_type], slice_shape,
-                       int(job_size), float(dur_min))
+                       job_size, float(dur_min))
             new_prob = accumulated_prob.setdefault(job_key, 0) + float(p)
             accumulated_prob[job_key] = new_prob
         if is_file:
             f.close()
         for i, (job_key, p) in enumerate(accumulated_prob.items()):
-            topology, slice_shape, job_size, duration = job_key
+            topology, slice_shape, _, duration = job_key
             # Random variable only needs a list of values and their probabilities.
             # Hence, the specific job info is tracked by the `self.jobs` dict.
             self.dist_size.append([i, float(p) / 100])
-            # Torus shape is separated by 'x', while Clos shape is separated by '+'.
-            shape_delim = '+' if topology == TopoType.CLOS else 'x'
+            shape_tup = SplitShape(slice_shape, topology)
             self.jobs[i] = Job(uuid=0, topology=topology,
-                               shape=tuple(
-                                   map(int, slice_shape.split(shape_delim))),
-                               size=int(job_size), duration_minutes=duration)
+                               shape=shape_tup, size=sum(shape_tup),
+                               duration_minutes=duration)
         slice_ids, probs = zip(*self.dist_size)
         # If the distribution does not add up to 1, normalize it.
         # E.g., this happens in Table 2 of Google's TPUv4 paper (ISCA'23).

@@ -5,7 +5,7 @@ import csv
 import numpy as np
 from io import StringIO
 
-from common.job import TopoType, Job
+from common.job import TopoType, Job, SplitShape
 
 
 class TraceReplay:
@@ -27,12 +27,13 @@ class TraceReplay:
                 # Skips the comment line.
                 if line.startswith('#'):
                     continue
-                jid, arrival_time_sec, topo_type, shape, job_size, duration_min = line.strip().split(',')
-                shape_delim = '+' if TopoType[topo_type] == TopoType.CLOS else 'x'
+                # Ignore the job size in the trace because the size could become different depending
+                # on whether fractional XPUs are allowed.
+                jid, arrival_time_sec, topo_type, shape, _, duration_min = line.strip().split(',')
+                shape_tup = SplitShape(shape, TopoType[topo_type])
                 self.jobs.append(Job(uuid=int(jid), topology=TopoType[topo_type],
-                                     shape=tuple(
-                                         map(int, shape.split(shape_delim))),
-                                     size=int(job_size), arrival_time_sec=float(arrival_time_sec),
+                                     shape=shape_tup, size=sum(shape_tup),
+                                     arrival_time_sec=float(arrival_time_sec),
                                      duration_minutes=float(duration_min)))
 
     def run(self, num_jobs=1):
