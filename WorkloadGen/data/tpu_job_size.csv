@@ -1,4 +1,4 @@
-# slice id, topology, slice shape, slice size, duration (min), probability (%)
+# slice id, topology, slice shape, slice size, duration (sec), probability (%)
 0,T3D_NT,1x1x1,1,0,2.1
 1,T3D_NT,1x1x2,2,0,0.4
 2,T3D_NT,1x2x2,4,0,6.7

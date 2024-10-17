@@ -47,9 +47,9 @@ class WorkloadGenerator:
             # Skips the comment line.
             if line.startswith('#'):
                 continue
-            _, topo_type, slice_shape, job_size, dur_min, p = line.strip().split(',')
+            _, topo_type, slice_shape, job_size, duration, p = line.strip().split(',')
             job_key = (TopoType[topo_type], slice_shape,
-                       job_size, float(dur_min))
+                       job_size, float(duration))
             new_prob = accumulated_prob.setdefault(job_key, 0) + float(p)
             accumulated_prob[job_key] = new_prob
         if is_file:
@@ -62,7 +62,7 @@ class WorkloadGenerator:
             shape_tup = SplitShape(slice_shape, topology)
             self.jobs[i] = Job(uuid=0, topology=topology,
                                shape=shape_tup, size=sum(shape_tup),
-                               duration_minutes=duration)
+                               duration_sec=duration)
         slice_ids, probs = zip(*self.dist_size)
         # If the distribution does not add up to 1, normalize it.
         # E.g., this happens in Table 2 of Google's TPUv4 paper (ISCA'23).

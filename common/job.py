@@ -28,7 +28,21 @@ class Job():
     size: Union[float, int]
     # Absolute job arrival time, not IAT.
     arrival_time_sec: float = 0
-    duration_minutes: Optional[float] = None
+    duration_sec: Optional[float] = None
+
+
+@dataclass
+class Subjob():
+    '''
+    A partial job that gets mapped to a single XPU.
+    '''
+    # Must be the same as the parent job's uuid.
+    uuid: int
+    # Size of the subjob, i.e., the number of XPU needed.
+    size: Union[float, int]
+    # Absolute job arrival time, not IAT.
+    arrival_time_sec: float = 0
+    duration_sec: Optional[float] = None
 
 
 def SplitShape(shape: str, topo: TopoType) -> Tuple[Union[float, int], ...]:

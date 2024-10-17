@@ -29,12 +29,12 @@ class TraceReplay:
                     continue
                 # Ignore the job size in the trace because the size could become different depending
                 # on whether fractional XPUs are allowed.
-                jid, arrival_time_sec, topo_type, shape, _, duration_min = line.strip().split(',')
+                jid, arrival_time_sec, topo_type, shape, _, duration = line.strip().split(',')
                 shape_tup = SplitShape(shape, TopoType[topo_type])
                 self.jobs.append(Job(uuid=int(jid), topology=TopoType[topo_type],
                                      shape=shape_tup, size=sum(shape_tup),
                                      arrival_time_sec=float(arrival_time_sec),
-                                     duration_minutes=float(duration_min)))
+                                     duration_sec=float(duration)))
 
     def run(self, num_jobs=1):
         '''
@@ -60,7 +60,7 @@ class TraceReplay:
         for job in self.jobs:
             delim = '+' if job.topology == TopoType.CLOS else 'x'
             job_key = (job.topology.name, delim.join(map(str, job.shape)),
-                       job.size, job.duration_minutes)
+                       job.size, job.duration_sec)
             arrival_times.append(job.arrival_time_sec)
             size_dict[job_key] = size_dict.setdefault(job_key, 0) + 1
 
@@ -76,7 +76,7 @@ class TraceReplay:
         # Prepare the size distribution.
         f_size = csv.writer(buf_size, delimiter=',')
         f_size.writerow(['# id', 'topology', 'shape', 'size',
-                        'duration (min)', 'Probability (%)'])
+                        'duration (sec)', 'Probability (%)'])
         for i, (job_key, freq) in enumerate(size_dict.items()):
             row = list(job_key) + [freq / len(self.jobs) * 100]
             row.insert(0, i)
