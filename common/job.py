@@ -26,6 +26,7 @@ class Job():
     # where each x, y, z represents the number of XPUs on a single machine.
     shape: Tuple[Union[float, int], ...]
     size: Union[float, int]
+    # Absolute job arrival time, not IAT.
     arrival_time_sec: float = 0
     duration_minutes: Optional[float] = None
 
