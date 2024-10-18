@@ -5,6 +5,7 @@ import copy
 import numpy as np
 from scipy.stats import rv_discrete
 from io import StringIO
+from typing import Union
 
 from common.job import TopoType, Job, SplitShape
 from common.simpleUUID import SimpleUUID
@@ -16,7 +17,7 @@ class WorkloadGenerator:
     It can generate workloads following the given distribution.
     '''
 
-    def __init__(self, arrival_time_file, job_size_file):
+    def __init__(self, arrival_time_file: Union[str, StringIO], job_size_file: Union[str, StringIO]):
         if not arrival_time_file or not job_size_file:
             raise RuntimeError('Distribution files are not provided')
         # Job inter-arrival time is modeled by `self.rv_iat`, in seconds.
@@ -26,7 +27,7 @@ class WorkloadGenerator:
         self._loadSizeDist(job_size_file)
         self.uuidgen = SimpleUUID()
 
-    def _loadSizeDist(self, filename):
+    def _loadSizeDist(self, filename: Union[str, StringIO]):
         '''
         Loads the given job size csv file (or a StringIO equivalent) and
         parses it into a distribution (PDF).
@@ -70,7 +71,7 @@ class WorkloadGenerator:
             probs = np.array(probs) / sum(probs)
         self.rv_size = rv_discrete(values=(slice_ids, probs))
 
-    def _loadIATDist(self, filename):
+    def _loadIATDist(self, filename: Union[str, StringIO]):
         '''
         Loads the given job inter-arrival time (IAT) csv file (or a StringIO equivalent)
         and parses it into a distribution (PDF).
@@ -96,7 +97,7 @@ class WorkloadGenerator:
             probs = np.array(probs) / sum(probs)
         self.rv_iat = rv_discrete(values=(iats, probs))
 
-    def run(self, num_samples=1):
+    def run(self, num_samples: int = 1) -> list[Job]:
         '''
         Generates one or more jobs. Returns a list of (IAT, Job) tuples.
         '''

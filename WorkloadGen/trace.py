@@ -6,6 +6,7 @@ import numpy as np
 from io import StringIO
 
 from common.job import TopoType, Job, SplitShape
+from typing import Tuple
 
 
 class TraceReplay:
@@ -13,12 +14,12 @@ class TraceReplay:
     Replays a given trace file.
     '''
 
-    def __init__(self, tracefile):
+    def __init__(self, tracefile: str):
         self.jobs = []
         self._parse_trace(tracefile)
         self.job_iter = iter(self.jobs)
 
-    def _parse_trace(self, tracefile):
+    def _parse_trace(self, tracefile: str):
         '''
         Parses a trace in csv format.
         '''
@@ -36,7 +37,7 @@ class TraceReplay:
                                      arrival_time_sec=float(arrival_time_sec),
                                      duration_sec=float(duration)))
 
-    def run(self, num_jobs=1):
+    def run(self, num_jobs: int = 1) -> list[Job]:
         '''
         Returns a list of given number of jobs from the trace, in order.
         Each job is used just once, no recycle.
@@ -47,7 +48,7 @@ class TraceReplay:
             jobs.append(next(self.job_iter, None))
         return jobs
 
-    def exportDist(self):
+    def exportDist(self) -> Tuple[StringIO, StringIO]:
         '''
         Converts the trace into two distributions - IAT and size distribution.
         Exports a tuple of two StringIO objects, first is IAT and second is size.
