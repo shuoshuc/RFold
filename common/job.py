@@ -1,11 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Tuple, Optional, Union
-from common.flags import *
 from math import ceil
+from typing import Tuple, Optional, Union
+
+from common.flags import *
 
 
 class TopoType(Enum):
@@ -15,7 +13,7 @@ class TopoType(Enum):
     CLOS = 'Folded Clos'
 
 
-@dataclass
+@dataclass(order=True)
 class Job():
     uuid: int
     topology: TopoType
@@ -29,20 +27,30 @@ class Job():
     # Absolute job arrival time, not IAT.
     arrival_time_sec: float = 0
     duration_sec: Optional[float] = None
+    # Set by the scheduler when the job is scheduled.
+    sched_time_sec: Optional[float] = None
 
 
-@dataclass
+@dataclass(order=True)
 class Subjob():
     '''
     A partial job that gets mapped to a single XPU.
     '''
+    # Completion time of the subjob, calculated based on arrival time and duration.
+    # Subjobs are sorted by their completion time.
+    completion_time_sec: float = field(init=False)
     # Must be the same as the parent job's uuid.
     uuid: int
     # Size of the subjob, i.e., the number of XPU needed.
     size: Union[float, int]
     # Absolute job arrival time, not IAT.
-    arrival_time_sec: float = 0
-    duration_sec: Optional[float] = None
+    arrival_time_sec: float
+    duration_sec: float
+    # Set by the scheduler when the job is scheduled.
+    sched_time_sec: float
+
+    def __post_init__(self):
+        self.completion_time_sec = self.sched_time_sec + self.duration_sec
 
 
 def SplitShape(shape: str, topo: TopoType) -> Tuple[Union[float, int], ...]:

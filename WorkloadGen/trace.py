@@ -1,12 +1,13 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import csv
+import logging
 import numpy as np
+import simpy
 from io import StringIO
+from collections.abc import Iterator
+from typing import Tuple
 
 from common.job import TopoType, Job, SplitShape
-from typing import Tuple
+from ClusterManager.manager import ClusterManager
 
 
 class TraceReplay:
@@ -14,7 +15,10 @@ class TraceReplay:
     Replays a given trace file.
     '''
 
-    def __init__(self, tracefile: str):
+    def __init__(self, env: simpy.core.Environment, tracefile: str,
+                 cluster_mgr: ClusterManager):
+        self.env = env
+        self.cluster_mgr = cluster_mgr
         self.jobs = []
         self._parse_trace(tracefile)
         self.job_iter = iter(self.jobs)
@@ -37,16 +41,18 @@ class TraceReplay:
                                      arrival_time_sec=float(arrival_time_sec),
                                      duration_sec=float(duration)))
 
-    def run(self, num_jobs: int = 1) -> list[Job]:
+    def run(self) -> Iterator[simpy.events.Timeout]:
         '''
-        Returns a list of given number of jobs from the trace, in order.
-        Each job is used just once, no recycle.
-        If the jobs run out, the return list is filled with None to match the requested number.
+        Fetch a job from the trace and submit it to the ClusterManager.
+        Repeat until the jobs run out.
         '''
-        jobs = []
-        for _ in range(num_jobs):
-            jobs.append(next(self.job_iter, None))
-        return jobs
+        job = next(self.job_iter, None)
+        while job:
+            yield self.env.timeout(job.arrival_time_sec - self.env.now)
+            logging.info(
+                f't = {self.env.now}, job: {job.uuid}, arrival: {job.arrival_time_sec}')
+            self.cluster_mgr.submitJob(job)
+            job = next(self.job_iter, None)
 
     def exportDist(self) -> Tuple[StringIO, StringIO]:
         '''

@@ -1,14 +1,15 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import copy
+import logging
 import numpy as np
-from scipy.stats import rv_discrete
+import simpy
+from collections.abc import Iterator
 from io import StringIO
+from scipy.stats import rv_discrete
 from typing import Union
 
 from common.job import TopoType, Job, SplitShape
 from common.simpleUUID import SimpleUUID
+from ClusterManager.manager import ClusterManager
 
 
 class WorkloadGenerator:
@@ -17,7 +18,12 @@ class WorkloadGenerator:
     It can generate workloads following the given distribution.
     '''
 
-    def __init__(self, arrival_time_file: Union[str, StringIO], job_size_file: Union[str, StringIO]):
+    def __init__(self, env: simpy.core.Environment,
+                 arrival_time_file: Union[str, StringIO],
+                 job_size_file: Union[str, StringIO],
+                 cluster_mgr: ClusterManager):
+        self.env = env
+        self.cluster_mgr = cluster_mgr
         if not arrival_time_file or not job_size_file:
             raise RuntimeError('Distribution files are not provided')
         # Job inter-arrival time is modeled by `self.rv_iat`, in seconds.
@@ -97,17 +103,20 @@ class WorkloadGenerator:
             probs = np.array(probs) / sum(probs)
         self.rv_iat = rv_discrete(values=(iats, probs))
 
-    def run(self, num_samples: int = 1) -> list[Job]:
+    def run(self) -> Iterator[simpy.events.Timeout]:
         '''
-        Generates one or more jobs. Returns a list of (IAT, Job) tuples.
+        Generates jobs indefinitely and enqueues them.
         '''
-        jobs = []
-        iat_samples = self.rv_iat.rvs(size=num_samples).tolist()
-        for iat in iat_samples:
+        while True:
+            iat = self.rv_iat.rvs(size=1)[0]
             j = self.rv_size.rvs(size=1)[0]
             new_job = copy.deepcopy(self.jobs[j])
             new_job.uuid = self.uuidgen.fetch()
             new_job.arrival_time_sec = self.abs_time_sec
+
+            yield self.env.timeout(new_job.arrival_time_sec - self.env.now)
+            logging.info(
+                f't = {self.env.now}, job: {new_job.uuid}, arrival: {new_job.arrival_time_sec}')
+            self.cluster_mgr.submitJob(new_job)
+
             self.abs_time_sec += iat
-            jobs.append(new_job)
-        return jobs
