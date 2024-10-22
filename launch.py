@@ -29,21 +29,23 @@ def main():
         workload = trace
     else:
         csv_iat, csv_size = trace.exportDist()
-        workload = WorkloadGenerator(env, arrival_time_file=csv_iat,
-                                     job_size_file=csv_size, cluster_mgr=mgr)
+        workload = WorkloadGenerator(
+            env, arrival_time_file=csv_iat, job_size_file=csv_size, cluster_mgr=mgr
+        )
 
     # Start simulation.
-    logging.info('Simulation starts')
+    logging.info("Simulation starts")
+    env.process(mgr.schedule())
     env.process(workload.run())
-    env.run(SIM_DURATION_SEC)
-    logging.info('Simulation completes')
+    env.run(until=SIM_DURATION_SEC)
+    logging.info("Simulation completes")
 
 
 if __name__ == "__main__":
     lvl = getattr(logging, LOG_LEVEL.upper(), None)
     if not isinstance(lvl, int):
-        raise ValueError(f'Invalid log level: {lvl}')
+        raise ValueError(f"Invalid log level: {lvl}")
     logging.basicConfig(
-        format='%(module)s:%(funcName)s:%(lineno)-10d\t%(message)s',
-        level=lvl)
+        format="%(module)s::%(funcName)s():%(lineno)-10d\t%(message)s", level=lvl
+    )
     main()

@@ -7,14 +7,16 @@ from common.flags import *
 
 
 class TopoType(Enum):
-    T2D = '2D Torus'
-    T3D_NT = '3D Torus non-twisted'
-    T3D_T = '3D Torus twisted'
-    CLOS = 'Folded Clos'
+    T2D = "2D Torus"
+    T3D_NT = "3D Torus non-twisted"
+    T3D_T = "3D Torus twisted"
+    CLOS = "Folded Clos"
 
 
 @dataclass(order=True)
-class Job():
+class Job:
+    # Priority + monotonic UUID should be unique to distinguish jobs.
+    priority: float = field(init=False, repr=False)
     uuid: int
     topology: TopoType
     # For 2D Torus, shape should appear as (x, y), where x and y are the
@@ -30,12 +32,19 @@ class Job():
     # Set by the scheduler when the job is scheduled.
     sched_time_sec: Optional[float] = None
 
+    def __post_init__(self):
+        self.priority = self.arrival_time_sec
+
+    def short_print(self):
+        return f"[Job {self.uuid}, arrival t = {self.arrival_time_sec}]"
+
 
 @dataclass(order=True)
-class Subjob():
-    '''
+class Subjob:
+    """
     A partial job that gets mapped to a single XPU.
-    '''
+    """
+
     # Completion time of the subjob, calculated based on arrival time and duration.
     # Subjobs are sorted by their completion time.
     completion_time_sec: float = field(init=False)
@@ -54,10 +63,12 @@ class Subjob():
 
 
 def SplitShape(shape: str, topo: TopoType) -> Tuple[Union[float, int], ...]:
-    '''
+    """
     Splits the given shape string into a tuple of integers or floats.
     E.g., 1+1+1+1 -> (1, 1, 1, 1).
-    '''
+    """
     # Torus shape is separated by 'x', while Clos shape is separated by '+'.
-    shape_delim = '+' if topo == TopoType.CLOS else 'x'
-    return tuple(map(lambda x: float(x) if FRAC_XPU else ceil(x), shape.split(shape_delim)))
+    shape_delim = "+" if topo == TopoType.CLOS else "x"
+    return tuple(
+        map(lambda x: float(x) if FRAC_XPU else ceil(x), shape.split(shape_delim))
+    )
