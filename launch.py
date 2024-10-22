@@ -45,7 +45,13 @@ if __name__ == "__main__":
     lvl = getattr(logging, LOG_LEVEL.upper(), None)
     if not isinstance(lvl, int):
         raise ValueError(f"Invalid log level: {lvl}")
-    logging.basicConfig(
-        format="%(module)s::%(funcName)s():%(lineno)-10d\t%(message)s", level=lvl
+    # Configure the root logger.
+    logger = logging.getLogger()
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        fmt="{module}::{funcName}():{lineno}\t\t{message}", style="{"
     )
+    logger.setLevel(lvl)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
     main()
