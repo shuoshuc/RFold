@@ -9,12 +9,12 @@ pip install 'scipy>=1.13.1' 'numpy>=2.0.2' 'simpy>=4.1.1'
 ```
 
 # Folder structure
-* common/: common things used by all modules, e.g., flags, data structure definitions.
-* Cluster/: cluster/node and topology implementation.
-* ClusterManager/: cluster manager module.
-* WorkloadGen/: the workload generator module.
-* test/: unit tests.
-* launch.py: starting point of the simulator.
+* **common/**: common things used by all modules, e.g., flags, data structure definitions.
+* **Cluster/**: cluster/node and topology implementation.
+* **ClusterManager/**: cluster manager module.
+* **WorkloadGen/**: the workload generator module.
+* **test/**: unit tests.
+* **launch.py**: starting point of the simulator.
 
 # How to run
 To start a simulation, run:
