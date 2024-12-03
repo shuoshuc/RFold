@@ -8,6 +8,11 @@ USE_TRACE = True
 # DEBUG, INFO, WARNING, ERROR, CRITICAL.
 LOG_LEVEL = "INFO"
 
+# Time duration (seconds) a job is deferred for scheduling.
+# This typically happens when the initial scheduling decision of
+# a job is reject. The deferral avoids busy looping.
+DEFERRED_SCHED_SEC = 30
+
 # Length of the simulation in seconds.
 SIM_DURATION_SEC = 400000
 

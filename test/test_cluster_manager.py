@@ -1,8 +1,9 @@
 import copy
 import simpy
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, call
 
+from common.flags import *
 from common.job import Job, TopoType
 from ClusterManager.manager import ClusterManager
 from ClusterManager.scheduling import SchedDecision
@@ -86,3 +87,52 @@ class TestClusterManager(unittest.TestCase):
             self.assertEqual(self.mgr.scheduler.place.call_count, 3)
             # New job queue should be empty since all jobs are admitted.
             self.assertTrue(self.mgr.new_job_queue.empty())
+
+    def test_one_job_reject(self):
+        """
+        Verify that there is one job submitted and rejected.
+        """
+        job1 = copy.deepcopy(JOB1)
+        with patch(
+            "ClusterManager.scheduling.SchedulingPolicy.place",
+            return_value=SchedDecision.REJECT,
+        ):
+            self.env.process(self.mgr.schedule())
+            self.env.process(self.wgen_helper([job1]))
+            self.env.run(until=DEFERRED_SCHED_SEC + 1)
+            # The job is rejected for the first time at t = 0. It is deferred until
+            # t = DEFERRED_SCHED_SEC, when it gets rejected again. And the job is
+            # deferred util t = 2 * DEFERRED_SCHED_SEC. So by the time simulation ends,
+            # the job is still deferred.
+            self.assertTrue(self.mgr.new_job_queue.empty())
+            # There should be two scheduling attempts: one for the initial job and
+            # one when the first deferral is over.
+            self.mgr.scheduler.place.assert_has_calls([call(job1), call(job1)])
+            # Deferred job queue should *NOT* be empty since the job is rejected a second
+            # time and still deferred when simulation completes.
+            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
+
+    def test_multi_job_reject(self):
+        """
+        Verify that multiple jobs are submitted and rejected.
+        """
+        job1 = copy.deepcopy(JOB1)
+        job2 = copy.deepcopy(JOB1)
+        job2.arrival_time_sec = 2
+        job3 = copy.deepcopy(JOB1)
+        job3.arrival_time_sec = 3
+        with patch(
+            "ClusterManager.scheduling.SchedulingPolicy.place",
+            return_value=SchedDecision.REJECT,
+        ):
+            self.env.process(self.mgr.schedule())
+            self.env.process(self.wgen_helper([job1, job2, job3]))
+            self.env.run(until=DEFERRED_SCHED_SEC + 1)
+            self.assertTrue(self.mgr.new_job_queue.empty())
+            # Job1 is rejected twice, job2 and job3 each gets rejected once.
+            # Must be in the exact order.
+            self.mgr.scheduler.place.assert_has_calls(
+                [call(job1), call(job2), call(job3), call(job1)]
+            )
+            # All three jobs are still deferred when simulation completes.
+            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 3)

@@ -15,7 +15,8 @@ class TestTraceReplayWithSimpy(unittest.TestCase):
         self.env = simpy.Environment()
         self.mock_mgr = MagicMock(spec=ClusterManager)
         self.trace = TraceReplay(
-            self.env, tracefile=PHILLY_TRACE, cluster_mgr=self.mock_mgr)
+            self.env, tracefile=PHILLY_TRACE, cluster_mgr=self.mock_mgr
+        )
 
     def test_run_one(self):
         self.assertEqual(len(self.trace.jobs), 111549)
@@ -23,8 +24,17 @@ class TestTraceReplayWithSimpy(unittest.TestCase):
         self.env.process(self.trace.run())
         # Run simulation for 1 second. There should only be one job generated.
         self.env.run(1)
-        self.mock_mgr.submitJob.assert_called_once_with(Job(uuid=0, topology=TopoType.CLOS, shape=(
-            1,), size=1, arrival_time_sec=0.0, duration_sec=3613033.0, sched_time_sec=None))
+        self.mock_mgr.submitJob.assert_called_once_with(
+            Job(
+                uuid=0,
+                topology=TopoType.CLOS,
+                shape=(1,),
+                size=1,
+                arrival_time_sec=0.0,
+                duration_sec=3613033.0,
+                sched_time_sec=None,
+            )
+        )
         # The simulation time should have advanced to t = 1 sec.
         self.assertAlmostEqual(self.env.now, 1.0)
 
@@ -34,7 +44,9 @@ class TestTraceReplayWithSimpy(unittest.TestCase):
         self.env.process(self.trace.run())
         # Run simulation to completion.
         self.env.run()
-        self.assertEqual(self.mock_mgr.submitJob.call_count, 111549)
+        # The submitJob() method should be called at least as many times as the job count.
+        # Could be more if some jobs are rejected/deferred and retried.
+        self.assertGreaterEqual(self.mock_mgr.submitJob.call_count, 111549)
         # The simulation time should have advanced to a very large time, e.g., t = 10000 sec.
         self.assertGreater(self.env.now, 10000.0)
 
@@ -45,8 +57,11 @@ class TestWorkloadGenWithSimpy(unittest.TestCase):
         self.env = simpy.Environment()
         self.mock_mgr = MagicMock(spec=ClusterManager)
         self.wgen = WorkloadGenerator(
-            self.env, arrival_time_file=TPU_ARRIVAL_TIME_DIST,
-            job_size_file=TPU_JOB_SIZES_DIST, cluster_mgr=self.mock_mgr)
+            self.env,
+            arrival_time_file=TPU_ARRIVAL_TIME_DIST,
+            job_size_file=TPU_JOB_SIZES_DIST,
+            cluster_mgr=self.mock_mgr,
+        )
 
     def test_run_one(self):
         self.assertEqual(len(self.wgen.dist_iat), 51)

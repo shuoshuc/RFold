@@ -9,8 +9,7 @@ from WorkloadGen.trace import TraceReplay
 class TestTraceReplay(unittest.TestCase):
 
     def setUp(self):
-        self.trace = TraceReplay(
-            None, tracefile=PHILLY_TRACE, cluster_mgr=None)
+        self.trace = TraceReplay(None, tracefile=PHILLY_TRACE, cluster_mgr=None)
 
     def test_loading(self):
         self.assertNotEqual(len(self.trace.jobs), 0)
@@ -35,14 +34,14 @@ class TestTraceReplay(unittest.TestCase):
         self.assertNotEqual(size, None)
         iat_lines = iat.readlines()
         self.assertEqual(len(iat_lines), 111549)
-        self.assertTrue(iat_lines[0].startswith('#'))
-        t, prob = iat_lines[1].strip().split(',')
+        self.assertTrue(iat_lines[0].startswith("#"))
+        t, prob = iat_lines[1].strip().split(",")
         self.assertAlmostEqual(float(t), 266563.0)
         self.assertAlmostEqual(float(prob), 0.0008964750600638291)
         size_lines = size.readlines()
         self.assertEqual(len(size_lines), 31654)
-        self.assertTrue(size_lines[0].startswith('#'))
-        job_id, _, _, size, dur, prob = size_lines[1].strip().split(',')
+        self.assertTrue(size_lines[0].startswith("#"))
+        job_id, _, _, size, dur, prob = size_lines[1].strip().split(",")
         self.assertEqual(int(job_id), 0)
         self.assertAlmostEqual(float(size), 1.0)
         self.assertAlmostEqual(float(dur), 3613033.0)
@@ -53,8 +52,11 @@ class TestWorkloadGen(unittest.TestCase):
 
     def setUp(self):
         self.wgen = WorkloadGenerator(
-            None, arrival_time_file=TPU_ARRIVAL_TIME_DIST,
-            job_size_file=TPU_JOB_SIZES_DIST, cluster_mgr=None)
+            None,
+            arrival_time_file=TPU_ARRIVAL_TIME_DIST,
+            job_size_file=TPU_JOB_SIZES_DIST,
+            cluster_mgr=None,
+        )
 
     def test_loading(self):
         self.assertEqual(len(self.wgen.dist_iat), 51)
@@ -77,11 +79,11 @@ class TestWorkloadGen(unittest.TestCase):
 class TestWorkloadGenExported(unittest.TestCase):
 
     def setUp(self):
-        self.trace = TraceReplay(
-            None, tracefile=PHILLY_TRACE, cluster_mgr=None)
+        self.trace = TraceReplay(None, tracefile=PHILLY_TRACE, cluster_mgr=None)
         iat, size = self.trace.exportDist()
         self.wgen = WorkloadGenerator(
-            None, arrival_time_file=iat, job_size_file=size, cluster_mgr=None)
+            None, arrival_time_file=iat, job_size_file=size, cluster_mgr=None
+        )
 
     def test_loading(self):
         self.assertEqual(len(self.wgen.dist_iat), 878)
