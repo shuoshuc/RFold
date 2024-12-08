@@ -136,3 +136,58 @@ class TestClusterManager(unittest.TestCase):
             )
             # All three jobs are still deferred when simulation completes.
             self.assertEqual(self.mgr.deferred_job_queue.qsize(), 3)
+
+    def test_mixed_jobs(self):
+        """
+        Verify that a mixture of jobs are handled as expected.
+        """
+        jobs = []
+        cnt = 3
+        for t in range(cnt):
+            job = Job(
+                uuid=t + 1,
+                topology=TopoType.CLOS,
+                shape=(1,),
+                size=1,
+                duration_sec=1,
+                arrival_time_sec=t,
+            )
+            jobs.append(job)
+
+        with patch(
+            "ClusterManager.scheduling.SchedulingPolicy.place",
+            side_effect=[
+                SchedDecision.ADMIT,
+                SchedDecision.REJECT,
+                SchedDecision.ADMIT,
+                SchedDecision.ADMIT,
+            ],
+        ):
+            self.env.process(self.mgr.schedule())
+            self.env.process(self.wgen_helper(jobs))
+            # Run simulation until t = 1. Only job1 is processed.
+            self.env.run(until=1)
+            self.assertTrue(self.mgr.new_job_queue.empty())
+            # Job1 is admitted, deferred queue should be empty.
+            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 0)
+            self.mgr.scheduler.place.assert_has_calls([call(jobs[0])])
+            # Continue simulation until t = 2. Job2 is processed.
+            self.env.run(until=2)
+            self.assertTrue(self.mgr.new_job_queue.empty())
+            # Job2 is rejected, it is put into the deferred queue.
+            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
+            self.mgr.scheduler.place.assert_has_calls([call(jobs[i]) for i in range(2)])
+            # Continue simulation until right before deferral is done. Job3 is processed.
+            self.env.run(until=DEFERRED_SCHED_SEC - 1)
+            self.assertTrue(self.mgr.new_job_queue.empty())
+            # Job3 is admitted, job2 is still in the deferred queue.
+            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
+            self.mgr.scheduler.place.assert_has_calls([call(jobs[i]) for i in range(cnt)])
+            # Continue simulation until right after deferral is done. Job2 is retried.
+            self.env.run(until=DEFERRED_SCHED_SEC + 2)
+            self.assertTrue(self.mgr.new_job_queue.empty())
+            # Job2 is taken out of the deferred queue, retried and admitted.
+            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 0)
+            self.mgr.scheduler.place.assert_has_calls(
+                [call(jobs[i]) for i in range(cnt)] + [call(jobs[1])]
+            )
