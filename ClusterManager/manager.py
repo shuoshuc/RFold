@@ -6,6 +6,7 @@ from typing import Generator, Optional
 
 from common.job import Job
 from common.flags import *
+from common.utils import Signal
 from ClusterManager.scheduling import SchedulingPolicy, SchedDecision
 
 
@@ -30,14 +31,11 @@ class ClusterManager:
         # [Consumer]: runningQueueGuard()
         self.running_job_queue: PriorityQueue[Job] = PriorityQueue()
         # An event to signal the arrival of a new job.
-        # Once it fires, keep in mind to reset it to a new event.
-        self.event_arrival = self.env.event()
+        self.event_arrival = Signal(env)
         # An event to signal that a deferred job is enqueued.
-        # Once it fires, keep in mind to reset it to a new event.
-        self.event_deferral = self.env.event()
+        self.event_deferral = Signal(env)
         # An event to signal that a running job is enqueued.
-        # Once it fires, keep in mind to reset it to a new event.
-        self.event_running = self.env.event()
+        self.event_running = Signal(env)
         # Tracks the earliest (future) time to retry scheduling a deferred job.
         self.next_retry = self.env.now
         # Tracks the earliest (future) time that a running job will complete.
@@ -53,9 +51,7 @@ class ClusterManager:
         """
         self.new_job_queue.put(job)
         logging.info(f"t = {self.env.now}, enqueued: {job.short_print()}")
-        self.event_arrival.succeed()
-        # Reset the arrival event to a new one for next arrival.
-        self.event_arrival = self.env.event()
+        self.event_arrival.trigger()
 
     def deferJob(self, job: Job):
         """
@@ -73,8 +69,7 @@ class ClusterManager:
         self.deferred_job_queue.put(job)
         if empty_before:
             self.next_retry = self.env.now + DEFERRED_SCHED_SEC
-            self.event_deferral.succeed()
-            self.event_deferral = self.env.event()
+            self.event_deferral.trigger()
         logging.info(
             f"t = {self.env.now}, deferred: {job.short_print()}, next retry: t = {self.next_retry}"
         )
@@ -86,7 +81,7 @@ class ClusterManager:
         try:
             job = self.new_job_queue.get(block=False)
         except Empty:
-            yield self.event_arrival
+            yield self.event_arrival.signal()
             job = self.new_job_queue.get(block=False)
         return job
 
@@ -122,7 +117,7 @@ class ClusterManager:
             # which means nothing is deferred, it should just go back to waiting.
             try:
                 if self.deferred_job_queue.empty():
-                    yield self.event_deferral
+                    yield self.event_deferral.signal()
             except simpy.Interrupt:
                 logging.debug(
                     f"t = {self.env.now}, deferred queue guard interrupted while waiting."
@@ -164,7 +159,7 @@ class ClusterManager:
             # which is unexpected, it should just go back to waiting.
             try:
                 if self.running_job_queue.empty():
-                    yield self.event_running
+                    yield self.event_running.signal()
             except simpy.Interrupt:
                 logging.warning(
                     f"t = {self.env.now}, running queue guard unexpectedly interrupted."
@@ -263,5 +258,4 @@ class ClusterManager:
         else:
             # If the existing completion time is in the past, or the new job completes
             # after the existing completion time, it is a normal enqueue, no interrupt.
-            self.event_running.succeed()
-            self.event_running = self.env.event()
+            self.event_running.trigger()
