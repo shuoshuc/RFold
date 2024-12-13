@@ -29,7 +29,7 @@ class Job:
     # Absolute job arrival time, not IAT.
     arrival_time_sec: float = 0
     duration_sec: Optional[float] = None
-    # Set by the scheduler when the job is scheduled.
+    # The time when the job is scheduled/starts executing.
     sched_time_sec: Optional[float] = None
 
     def __post_init__(self):
@@ -70,5 +70,5 @@ def SplitShape(shape: str, topo: TopoType) -> Tuple[Union[float, int], ...]:
     # Torus shape is separated by 'x', while Clos shape is separated by '+'.
     shape_delim = "+" if topo == TopoType.CLOS else "x"
     return tuple(
-        map(lambda x: float(x) if FRAC_XPU else ceil(x), shape.split(shape_delim))
+        map(lambda x: float(x) if FRAC_XPU else ceil(float(x)), shape.split(shape_delim))
     )

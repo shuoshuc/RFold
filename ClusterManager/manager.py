@@ -22,10 +22,12 @@ class ClusterManager:
         # [Consumer]: schedule()
         self.new_job_queue: PriorityQueue[Job] = PriorityQueue()
         # A priority queue holding rejected jobs that are deferred for scheduling.
-        # [Producer]: deferJob()
+        # [Producer]: schedule()
         # [Consumer]: deferredQueueGuard()
         self.deferred_job_queue: PriorityQueue[Job] = PriorityQueue()
-        # A priority queue with running jobs.
+        # A priority queue with running jobs, sorted by job completion time.
+        # [Producer]: schedule(), runningQueueGuard()
+        # [Consumer]: runningQueueGuard()
         self.running_job_queue: PriorityQueue[Job] = PriorityQueue()
         # An event to signal the arrival of a new job.
         # Once it fires, keep in mind to reset it to a new event.
@@ -33,10 +35,17 @@ class ClusterManager:
         # An event to signal that a deferred job is enqueued.
         # Once it fires, keep in mind to reset it to a new event.
         self.event_deferral = self.env.event()
+        # An event to signal that a running job is enqueued.
+        # Once it fires, keep in mind to reset it to a new event.
+        self.event_running = self.env.event()
         # Tracks the earliest (future) time to retry scheduling a deferred job.
         self.next_retry = self.env.now
+        # Tracks the earliest (future) time that a running job will complete.
+        self.next_completion = self.env.now
         # Guard process for the deferred job queue.
-        self.guard_proc = env.process(self.deferredQueueGuard())
+        self.dq_guard_proc = env.process(self.deferredQueueGuard())
+        # Guard process for the running job queue.
+        self.rq_guard_proc = env.process(self.runningQueueGuard())
 
     def submitJob(self, job: Job):
         """
@@ -91,8 +100,16 @@ class ClusterManager:
             return None
         return job
 
-    def fetchOneCompletedJob(self) -> Generator[simpy.events.Event, None, Job]:
-        pass
+    def fetchNextCompletingJobNoWait(self) -> Optional[Job]:
+        """
+        Fetch the job completing first from the running job queue. If no job is available,
+        return None.
+        """
+        try:
+            job = self.running_job_queue.get(block=False)
+        except Empty:
+            return None
+        return job
 
     def deferredQueueGuard(self) -> Generator[simpy.events.Event, None, None]:
         """
@@ -101,15 +118,31 @@ class ClusterManager:
         i.e., moving them back to the arrival queue.
         """
         while True:
-            # Wait until a deferred job is enqueued.
-            if self.deferred_job_queue.empty():
-                yield self.event_deferral
-            # Only start the timer when there is actually a deferred job.
-            yield self.env.timeout(self.next_retry - self.env.now)
-            logging.debug(
-                f"t = {self.env.now}, deferred queue guard wakes up, "
-                f"queue size: {self.deferred_job_queue.qsize()}"
-            )
+            # Wait until a deferred job is enqueued. If the process is interrupted here,
+            # which means nothing is deferred, it should just go back to waiting.
+            try:
+                if self.deferred_job_queue.empty():
+                    yield self.event_deferral
+            except simpy.Interrupt:
+                logging.debug(
+                    f"t = {self.env.now}, deferred queue guard interrupted while waiting."
+                )
+                continue
+
+            # Start the timer now that there is actually a deferred job. If the process
+            # is interrupted here, what needs to be done is still the same, just that the
+            # waiting time is cut short.
+            try:
+                yield self.env.timeout(self.next_retry - self.env.now)
+                logging.debug(
+                    f"t = {self.env.now}, deferred queue guard wakes up, "
+                    f"queue size: {self.deferred_job_queue.qsize()}"
+                )
+            except simpy.Interrupt:
+                logging.debug(
+                    f"t = {self.env.now}, deferral interrupted, "
+                    f"queue size: {self.deferred_job_queue.qsize()}"
+                )
             # Deferral is over, move deferred jobs back to the arrival queue.
             moved_jobs = []
             while not self.deferred_job_queue.empty():
@@ -119,6 +152,51 @@ class ClusterManager:
                     moved_jobs.append(deferred_job.uuid)
             if moved_jobs:
                 logging.info(f"t = {self.env.now}, released deferred jobs: {moved_jobs}")
+
+    def runningQueueGuard(self) -> Generator[simpy.events.Event, None, None]:
+        """
+        Guard process monitoring the running job queue. It waits for a job to be put
+        into the running queue and then waits until the time has advanced to the job's
+        completion time. Once the job is completed, the guard moves on to the next job.
+        """
+        while True:
+            # Wait until a running job is enqueued. If the process is interrupted here,
+            # which is unexpected, it should just go back to waiting.
+            try:
+                if self.running_job_queue.empty():
+                    yield self.event_running
+            except simpy.Interrupt:
+                logging.warning(
+                    f"t = {self.env.now}, running queue guard unexpectedly interrupted."
+                )
+                continue
+
+            # This may seem inefficient dequeueing and enqueuing the job back and forth.
+            # The main reason is to lazy update the next completion time when it is the
+            # the time to wait for completion. Given that a considerable amount of
+            # reordering could occur in the running queue, lazy update is less error-prone.
+            # We also do not want to hold on to the job while waiting for completion, because
+            # that leads to a misrepresentation of the running queue size.
+            job = self.fetchNextCompletingJobNoWait()
+            if job is None:
+                logging.error(f"[ERROR] t = {self.env.now}, running job queue is empty.")
+                continue
+            self.next_completion = job.priority
+            self.running_job_queue.put(job)
+            # Start the timer now that there is actually a running job. The process can
+            # be interrupted here if a new job with earlier completion time was enqueued.
+            try:
+                yield self.env.timeout(self.next_completion - self.env.now)
+                # Job completion means resource frees up, notify the deferred queue guard
+                # so that deferred jobs can be retried.
+                job = self.fetchNextCompletingJobNoWait()
+                if job is not None:
+                    logging.info(f"t = {self.env.now}, {job.short_print()} completed")
+                    self.dq_guard_proc.interrupt()
+            except simpy.Interrupt:
+                # The timer was interrupted, meaning a new running job with earlier
+                # completion time was enqueued.
+                logging.debug(f"t = {self.env.now}, runningQueueGuard interrupted")
 
     def schedule(self) -> Generator[simpy.events.Event, None, None]:
         """
@@ -132,13 +210,14 @@ class ClusterManager:
             job = yield self.env.process(self.fetchOneNewJob())
 
             # Make a scheduling decision on the current job.
-            decision = self.scheduler.place(job)
+            decision, job_to_sched = self.scheduler.place(job)
             logging.info(
-                f"t = {self.env.now}, schedule {job.short_print()}, "
+                f"t = {self.env.now}, schedule {job_to_sched.short_print()}, "
                 f"decision: {SchedDecision(decision).name}"
             )
             if decision == SchedDecision.ADMIT:
-                pass
+                # Admitted jobs are directly executed on the cluster.
+                self.executeOnCluster(job_to_sched)
             elif decision == SchedDecision.REJECT:
                 # Rejected jobs go into a deferred queue. To avoid busy looping, jobs
                 # in the deferred queue are only checked once every `DEFERRED_SCHED_SEC`,
@@ -146,12 +225,43 @@ class ClusterManager:
                 # time and scheduling the same job possibly leads to the same outcome.
                 # Note that jobs in the deferred queue maintain the same relative order,
                 # but the entire set of jobs are essentially reordered across queues.
-                self.deferJob(job)
+                self.deferJob(job_to_sched)
             elif decision == SchedDecision.PREEMPT:
                 # TODO: replace with actual preemption
                 # Sleep for a short period to simulate job migration delay.
                 sleep = 4
                 logging.info(f"t = {self.env.now}, migration delay: {sleep} sec")
                 yield self.env.timeout(sleep)
+                # Block until migration completes, and then execute on the cluster.
+                self.executeOnCluster(job_to_sched)
             elif decision == SchedDecision.RECONFIGURE:
-                pass
+                # TODO: replace with actual reconfiguration
+                # Sleep for a short period to simulate reconfiguration delay.
+                sleep = 1
+                logging.info(f"t = {self.env.now}, reconfiguration delay: {sleep} sec")
+                yield self.env.timeout(sleep)
+                # Block until reconfiguration completes, and then execute on the cluster.
+                self.executeOnCluster(job_to_sched)
+
+    def executeOnCluster(self, job: Job):
+        """
+        Send the job to the cluster for execution. Timestamp the job with the scheduled
+        time and move it to the running queue for continuous tracking.
+        """
+        # Scheduled time = time when the job is executed.
+        job.sched_time_sec = self.env.now
+        # Once a job is scheduled, its priority changes from arrival time to desired
+        # completion time.
+        job.priority = self.env.now + job.duration_sec
+        self.cluster.execute(job)
+        # Move the running job into the running queue.
+        self.running_job_queue.put(job)
+        if self.next_completion > self.env.now and job.priority < self.next_completion:
+            # This job has an earlier completion time than the existing (future)
+            # completion time. Interrupt the running queue guard to restart the timer.
+            self.rq_guard_proc.interrupt()
+        else:
+            # If the existing completion time is in the past, or the new job completes
+            # after the existing completion time, it is a normal enqueue, no interrupt.
+            self.event_running.succeed()
+            self.event_running = self.env.event()

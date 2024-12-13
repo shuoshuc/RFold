@@ -13,6 +13,7 @@ import simpy
 import logging
 
 from common.flags import *
+from Cluster.cluster import Cluster
 from ClusterManager.manager import ClusterManager
 from WorkloadGen.generator import WorkloadGenerator
 from WorkloadGen.trace import TraceReplay
@@ -21,8 +22,10 @@ from WorkloadGen.trace import TraceReplay
 def main():
     env = simpy.Environment()
 
+    # Initialize the cluster.
+    cluster = Cluster(env)
     # Initialize the cluster manager.
-    mgr = ClusterManager(env, cluster=None)
+    mgr = ClusterManager(env, cluster=cluster)
     # Spin up the workload generator.
     trace = TraceReplay(env, tracefile=ALIBABA_TRACE, cluster_mgr=mgr)
     if USE_TRACE:

@@ -1,5 +1,5 @@
 # Enable fractional XPU support if true.
-FRAC_XPU = True
+FRAC_XPU = False
 
 # True to replay a trace, False to generate new workload.
 USE_TRACE = True
