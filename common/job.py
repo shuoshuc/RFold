@@ -18,6 +18,10 @@ class Job:
     # Priority + monotonic UUID should be unique to distinguish jobs.
     priority: float = field(init=False, repr=False)
     uuid: int
+    # Absolute job arrival time, not IAT.
+    arrival_time_sec: float
+
+    # ----- resource requirements -----
     topology: TopoType
     # For 2D Torus, shape should appear as (x, y), where x and y are the
     # number of XPUs in each dimension.
@@ -26,11 +30,13 @@ class Job:
     # where each x, y, z represents the number of XPUs on a single machine.
     shape: Tuple[Union[float, int], ...]
     size: Union[float, int]
-    # Absolute job arrival time, not IAT.
-    arrival_time_sec: float = 0
     duration_sec: Optional[float] = None
+    # ----- end of resource requirements -----
+
+    # ----- allocation info -----
     # The time when the job is scheduled/starts executing.
     sched_time_sec: Optional[float] = None
+    # ----- end of allocation info -----
 
     def __post_init__(self):
         self.priority = self.arrival_time_sec

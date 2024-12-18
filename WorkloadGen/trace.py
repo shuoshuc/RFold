@@ -42,10 +42,10 @@ class TraceReplay:
                 self.jobs.append(
                     Job(
                         uuid=int(jid),
+                        arrival_time_sec=float(arrival_time_sec),
                         topology=TopoType[topo_type],
                         shape=shape_tup,
                         size=sum(shape_tup),
-                        arrival_time_sec=float(arrival_time_sec),
                         duration_sec=float(duration),
                     )
                 )

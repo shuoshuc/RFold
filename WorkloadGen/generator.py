@@ -71,6 +71,7 @@ class WorkloadGenerator:
             shape_tup = SplitShape(slice_shape, topology)
             self.jobs[i] = Job(
                 uuid=0,
+                arrival_time_sec=0,
                 topology=topology,
                 shape=shape_tup,
                 size=sum(shape_tup),
