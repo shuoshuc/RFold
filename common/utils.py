@@ -1,3 +1,4 @@
+import logging
 import simpy
 
 
@@ -22,3 +23,16 @@ class Signal:
         Expose the underlying event.
         """
         return self.event
+
+
+class PrettyForm(logging.Formatter):
+    """
+    Custom log formatter to make padding and alignment easier.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def format(self, record):
+        record.module = f"{record.module}::{record.funcName}():{record.lineno}"
+        return super().format(record)

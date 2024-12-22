@@ -21,3 +21,13 @@ TPU_JOB_SIZES_DIST = "WorkloadGen/data/tpu_job_size.csv"
 TPU_ARRIVAL_TIME_DIST = "WorkloadGen/data/tpu_arrival_time.csv"
 PHILLY_TRACE = "WorkloadGen/data/philly_trace.csv"
 ALIBABA_TRACE = "WorkloadGen/data/alibaba_v2020.csv"
+TOY_TRACE = "WorkloadGen/data/toy_trace.csv"
+
+# Scheduling policy to use.
+SCHED_POLICY = "simplefit"
+
+# Number of nodes in the cluster.
+NUM_NODES = 1
+
+# Number of XPUs on each node.
+NUM_XPU = 8

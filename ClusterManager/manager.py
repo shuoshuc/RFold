@@ -17,7 +17,7 @@ class ClusterManager:
         self.cluster = cluster
         # The scheduling policy module makes scheduling decisions given the
         # cluster state and a job.
-        self.scheduler = SchedulingPolicy(env)
+        self.scheduler = SchedulingPolicy(env, cluster)
         # A priority queue with newly arrived jobs.
         # [Producer]: WorkloadGen module, deferredQueueGuard()
         # [Consumer]: schedule()
@@ -44,13 +44,15 @@ class ClusterManager:
         self.dq_guard_proc = env.process(self.deferredQueueGuard())
         # Guard process for the running job queue.
         self.rq_guard_proc = env.process(self.runningQueueGuard())
+        # A map from job UUID to job statistics.
+        self.job_stats = {}
 
     def submitJob(self, job: Job):
         """
         Enqueue a job into the new job queue.
         """
         self.new_job_queue.put(job)
-        logging.info(f"t = {self.env.now}, enqueued: {job.short_print()}")
+        logging.debug(f"t = {self.env.now}, enqueued: {job.short_print()}")
         self.event_arrival.trigger()
 
     def deferJob(self, job: Job):
@@ -186,8 +188,8 @@ class ClusterManager:
                 # so that deferred jobs can be retried.
                 job = self.fetchNextCompletingJobNoWait()
                 if job is not None:
-                    logging.info(f"t = {self.env.now}, {job.short_print()} completed")
-                    self.dq_guard_proc.interrupt()
+                    logging.debug(f"t = {self.env.now}, {job.short_print()} completed")
+                    self.completeOnCluster(job)
             except simpy.Interrupt:
                 # The timer was interrupted, meaning a new running job with earlier
                 # completion time was enqueued.
@@ -198,7 +200,7 @@ class ClusterManager:
         Schedule received jobs. The main scheduling loop should not be blocking, except for
         (1) waiting for jobs to process, (2) simulating necessary processing delay.
         """
-        logging.info(f"t = {self.env.now}, cluster scheduling starts")
+        logging.debug(f"t = {self.env.now}, cluster scheduling starts")
         while True:
             # Wait until a new job arrives or fetch one that is already available.
             # Note that a new job could also be a deferred job that is put back for retry.
@@ -259,3 +261,18 @@ class ClusterManager:
             # If the existing completion time is in the past, or the new job completes
             # after the existing completion time, it is a normal enqueue, no interrupt.
             self.event_running.trigger()
+
+    def completeOnCluster(self, job: Job):
+        """
+        Send the completing job to the cluster to free up resources. Job statistics
+        are also updated.
+        """
+        self.cluster.complete(job)
+        # Update job statistics.
+        job.queueing_delay_sec = job.sched_time_sec - job.arrival_time_sec
+        job.completion_time_sec = self.env.now - job.arrival_time_sec
+        job.slowdown = job.completion_time_sec / job.duration_sec
+        self.job_stats[job.uuid] = job
+        # Notify the deferred queue guard to retry deferred jobs now that some resources
+        # have been freed up.
+        self.dq_guard_proc.interrupt()

@@ -13,6 +13,7 @@ import simpy
 import logging
 
 from common.flags import *
+from common.utils import PrettyForm
 from Cluster.cluster import Cluster
 from ClusterManager.manager import ClusterManager
 from WorkloadGen.generator import WorkloadGenerator
@@ -23,11 +24,11 @@ def main():
     env = simpy.Environment()
 
     # Initialize the cluster.
-    cluster = Cluster(env)
+    cluster = Cluster(env, num_nodes=NUM_NODES, num_xpu=NUM_XPU)
     # Initialize the cluster manager.
     mgr = ClusterManager(env, cluster=cluster)
     # Spin up the workload generator.
-    trace = TraceReplay(env, tracefile=ALIBABA_TRACE, cluster_mgr=mgr)
+    trace = TraceReplay(env, tracefile=TOY_TRACE, cluster_mgr=mgr)
     if USE_TRACE:
         workload = trace
     else:
@@ -43,6 +44,10 @@ def main():
     env.run(until=SIM_DURATION_SEC)
     logging.info("Simulation completes")
 
+    logging.info("----[Summary]-----")
+    for job in mgr.job_stats.values():
+        logging.info(f"{job.stats()}")
+
 
 if __name__ == "__main__":
     lvl = getattr(logging, LOG_LEVEL.upper(), None)
@@ -51,8 +56,9 @@ if __name__ == "__main__":
     # Configure the root logger.
     logger = logging.getLogger()
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        fmt="{module}::{funcName}():{lineno}\t\t{message}", style="{"
+    formatter = PrettyForm(
+        fmt="{module: <40} {message}",
+        style="{",
     )
     logger.setLevel(lvl)
     handler.setFormatter(formatter)

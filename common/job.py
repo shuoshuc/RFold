@@ -1,9 +1,13 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from math import ceil
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, TypedDict
 
 from common.flags import *
+
+
+# Definition of type Allocation: it is a dict.
+Allocation = TypedDict("Allocation", {"node": str, "num_xpu": Union[int, float]})
 
 
 class TopoType(Enum):
@@ -36,13 +40,33 @@ class Job:
     # ----- allocation info -----
     # The time when the job is scheduled/starts executing.
     sched_time_sec: Optional[float] = None
+    # Detailed allocation provided after a scheduling decision (admit or similar) is made.
+    allocation: Optional[Allocation] = field(default_factory=dict)
     # ----- end of allocation info -----
+
+    # ----- stats -----
+    # Job queueing delay.
+    queueing_delay_sec: Optional[float] = None
+    # Job completion time (including queueing and other waiting time).
+    completion_time_sec: Optional[float] = None
+    # A ratio of JCT / job duration. 1 means no slowdown.
+    slowdown: Optional[float] = None
+    # ----- end of stats -----
 
     def __post_init__(self):
         self.priority = self.arrival_time_sec
 
     def short_print(self):
-        return f"[Job {self.uuid}, arrival t = {self.arrival_time_sec}]"
+        return (
+            f"[Job {self.uuid}, arrive t={self.arrival_time_sec}, "
+            f"size={self.size}, dur={self.duration_sec}]"
+        )
+
+    def stats(self):
+        return (
+            f"Job {self.uuid}, queueing={self.queueing_delay_sec}, "
+            f"completion={self.completion_time_sec}, slowdown={self.slowdown}"
+        )
 
 
 @dataclass(order=True)

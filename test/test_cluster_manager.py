@@ -400,3 +400,44 @@ class TestClusterManager(unittest.TestCase):
             self.assertEqual(self.mgr.next_completion, 10)
             self.mgr.scheduler.place.assert_has_calls([call(job1), call(job2)])
             self.assertEqual(self.mock_cluster.execute.call_count, 2)
+
+    def test_valid_job_completion(self):
+        """
+        Verify that a valid job has allocation field set and statistics populated.
+        """
+        # Job1 is the submitted, unscheduled job.
+        job1 = copy.deepcopy(JOB1)
+        job1.duration_sec = 10
+        # Job1_sched is the scheduled job.
+        job1_sched = copy.deepcopy(JOB1)
+        job1_sched.duration_sec = 10
+        job1_sched.allocation = {"n1": 1}
+        with patch(
+            "ClusterManager.scheduling.SchedulingPolicy.place",
+            side_effect=[
+                (SchedDecision.ADMIT, job1_sched),
+            ],
+        ):
+            self.env.process(self.mgr.schedule())
+            self.env.process(self.wgen_helper([job1]))
+            # Job1 is running but incomplete, so statistics are not populated.
+            self.env.run(until=2)
+            self.assertEqual(job1_sched.sched_time_sec, 0)
+            self.assertEqual(job1_sched.queueing_delay_sec, None)
+            self.assertEqual(job1_sched.completion_time_sec, None)
+            self.assertEqual(job1_sched.slowdown, None)
+            self.assertEqual(self.mgr.job_stats, {})
+            # Job1 has completed now.
+            self.env.run(until=11)
+            self.assertTrue(self.mgr.new_job_queue.empty())
+            self.assertTrue(self.mgr.deferred_job_queue.empty())
+            self.assertTrue(self.mgr.running_job_queue.empty())
+            # Called with job1 but returns job1_sched.
+            self.mgr.scheduler.place.assert_has_calls([call(job1)])
+            # Job1 is scheduled and completed, statistics are populated.
+            self.mock_cluster.execute.assert_has_calls([call(job1_sched)])
+            self.mock_cluster.complete.assert_has_calls([call(job1_sched)])
+            self.assertEqual(job1_sched.queueing_delay_sec, 0)
+            self.assertEqual(job1_sched.completion_time_sec, 10)
+            self.assertEqual(job1_sched.slowdown, 1)
+            self.assertEqual(self.mgr.job_stats, {job1_sched.uuid: job1_sched})
