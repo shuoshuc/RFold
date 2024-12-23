@@ -21,6 +21,8 @@ TPU_JOB_SIZES_DIST = "WorkloadGen/data/tpu_job_size.csv"
 TPU_ARRIVAL_TIME_DIST = "WorkloadGen/data/tpu_arrival_time.csv"
 PHILLY_TRACE = "WorkloadGen/data/philly_trace.csv"
 ALIBABA_TRACE = "WorkloadGen/data/alibaba_v2020.csv"
+HELIOS_TRACE = "WorkloadGen/data/helios.csv"
+ACME_TRACE = "WorkloadGen/data/acme.csv"
 TOY_TRACE = "WorkloadGen/data/toy_trace.csv"
 
 # Scheduling policy to use.
