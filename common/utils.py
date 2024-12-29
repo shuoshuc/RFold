@@ -1,3 +1,4 @@
+import json
 import logging
 import simpy
 
@@ -36,3 +37,11 @@ class PrettyForm(logging.Formatter):
     def format(self, record):
         record.module = f"{record.module}::{record.funcName}():{record.lineno}"
         return super().format(record)
+
+
+def spec_parser(specfile: str) -> dict:
+    """
+    Parse the cluster spec file.
+    """
+    with open(specfile, "r") as f:
+        return json.load(f)

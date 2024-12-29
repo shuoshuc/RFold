@@ -24,12 +24,17 @@ ALIBABA_TRACE = "WorkloadGen/data/alibaba_v2020.csv"
 HELIOS_TRACE = "WorkloadGen/data/helios.csv"
 ACME_TRACE = "WorkloadGen/data/acme.csv"
 TOY_TRACE = "WorkloadGen/data/toy_trace.csv"
+C1_TRACE = "WorkloadGen/data/c1_trace.csv"
+C2_TRACE = "WorkloadGen/data/c2_trace.csv"
+
+C1_MODEL = "Cluster/models/c1.json"
+C2_MODEL = "Cluster/models/c2.json"
 
 # Scheduling policy to use.
 SCHED_POLICY = "simplefit"
 
-# Number of nodes in the cluster.
-NUM_NODES = 1
+# Path to the cluster spec file.
+MODEL_FILE = C1_MODEL
 
-# Number of XPUs on each node.
-NUM_XPU = 8
+# The trace to use.
+TRACE_NAME = C1_TRACE

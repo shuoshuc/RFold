@@ -13,7 +13,7 @@ import simpy
 import logging
 
 from common.flags import *
-from common.utils import PrettyForm
+from common.utils import PrettyForm, spec_parser
 from Cluster.cluster import Cluster
 from ClusterManager.manager import ClusterManager
 from WorkloadGen.generator import WorkloadGenerator
@@ -24,11 +24,11 @@ def main():
     env = simpy.Environment()
 
     # Initialize the cluster.
-    cluster = Cluster(env, num_nodes=NUM_NODES, num_xpu=NUM_XPU)
+    cluster = Cluster(env, spec=spec_parser(MODEL_FILE))
     # Initialize the cluster manager.
     mgr = ClusterManager(env, cluster=cluster)
     # Spin up the workload generator.
-    trace = TraceReplay(env, tracefile=TOY_TRACE, cluster_mgr=mgr)
+    trace = TraceReplay(env, tracefile=TRACE_NAME, cluster_mgr=mgr)
     if USE_TRACE:
         workload = trace
     else:

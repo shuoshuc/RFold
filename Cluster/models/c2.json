@@ -1,0 +1,74 @@
+{
+    "name": "c2",
+    "topology": "CLOS",
+    "dimx": 8,
+    "dimy": 1,
+    "dimz": 0,
+    "total_nodes": 8,
+    "nodes": [
+        {
+            "name": "t0-n0",
+            "num_xpu": 8,
+            "coordinates": [
+                0,
+                0
+            ]
+        },
+        {
+            "name": "t0-n1",
+            "num_xpu": 8,
+            "coordinates": [
+                1,
+                0
+            ]
+        },
+        {
+            "name": "t0-n2",
+            "num_xpu": 8,
+            "coordinates": [
+                2,
+                0
+            ]
+        },
+        {
+            "name": "t0-n3",
+            "num_xpu": 8,
+            "coordinates": [
+                3,
+                0
+            ]
+        },
+        {
+            "name": "t0-n4",
+            "num_xpu": 8,
+            "coordinates": [
+                4,
+                0
+            ]
+        },
+        {
+            "name": "t0-n5",
+            "num_xpu": 8,
+            "coordinates": [
+                5,
+                0
+            ]
+        },
+        {
+            "name": "t0-n6",
+            "num_xpu": 8,
+            "coordinates": [
+                6,
+                0
+            ]
+        },
+        {
+            "name": "t0-n7",
+            "num_xpu": 8,
+            "coordinates": [
+                7,
+                0
+            ]
+        }
+    ]
+}

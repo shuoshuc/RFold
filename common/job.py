@@ -11,7 +11,9 @@ Allocation = TypedDict("Allocation", {"node": str, "num_xpu": Union[int, float]}
 
 
 class TopoType(Enum):
+    MESH2D = "2D Mesh"
     T2D = "2D Torus"
+    MESH3D = "3D Mesh"
     T3D_NT = "3D Torus non-twisted"
     T3D_T = "3D Torus twisted"
     CLOS = "Folded Clos"
