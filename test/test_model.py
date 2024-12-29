@@ -46,6 +46,7 @@ class TestModel(unittest.TestCase):
         self.assertRaises(ValueError, build, TopoType.T2D, "test", (0, 0), 1)
         self.assertRaises(ValueError, build, TopoType.T2D, "test", (4, -1), 1)
         self.assertRaises(ValueError, build, TopoType.T2D, "test", (4, 4.1), 1)
+        self.assertRaises(ValueError, build, TopoType.T2D, "test", (4, 4), 0)
         self.assertRaises(ValueError, build, TopoType.T2D, "test", (4, 4), 2)
 
     def test_t3d(self):
@@ -83,11 +84,12 @@ class TestModel(unittest.TestCase):
         self.assertRaises(ValueError, build, TopoType.T3D_NT, "test", (4, 4), 1)
         self.assertRaises(ValueError, build, TopoType.T3D_NT, "test", (4, -1, 0), 1)
         self.assertRaises(ValueError, build, TopoType.T3D_NT, "test", (4, 1, 0.5), 1)
+        self.assertRaises(ValueError, build, TopoType.T3D_NT, "test", (4, 4, 4), 0)
         self.assertRaises(ValueError, build, TopoType.T3D_NT, "test", (4, 4, 4), 2)
 
     def test_clos_1tier(self):
         """
-        Test properties of a Clos model.
+        Test properties of a 1-tier Clos model.
         """
         model = build(topo=TopoType.CLOS, name="test", dimension=(8, 1), xpu_per_node=8)
         cluster = Cluster(self.env, spec=model)
@@ -110,3 +112,41 @@ class TestModel(unittest.TestCase):
             self.assertEqual(node.numXPU(), 8)
             self.assertEqual(node.numIdleXPU(), 8)
             self.assertEqual(cluster.getIdleXPU(node.name), 8)
+
+    def test_clos_2tier(self):
+        """
+        Test properties of a 2-tier Clos model.
+        """
+        model = build(
+            topo=TopoType.CLOS, name="test", dimension=(4, 2, 2), xpu_per_node=8
+        )
+        cluster = Cluster(self.env, spec=model)
+        self.assertIsNotNone(model)
+        self.assertIsNotNone(cluster)
+        self.assertEqual(model["name"], "test")
+        self.assertEqual(model["topology"], "CLOS")
+        self.assertEqual(model["dimx"], 4)
+        self.assertEqual(model["dimy"], 2)
+        self.assertEqual(model["dimz"], 2)
+        self.assertEqual(model["total_nodes"], 4 * 2)
+        self.assertEqual(len(model["nodes"]), 4 * 2)
+        for node in model["nodes"]:
+            coord = node["coordinates"]
+            self.assertEqual(node["name"], f"t{coord[1]}-n{coord[0]}")
+        self.assertEqual(cluster.name, "test")
+        self.assertEqual(cluster.topo, TopoType.CLOS)
+        self.assertEqual(cluster.numNodes(), 4 * 2)
+        for node in cluster.allNodes().values():
+            self.assertEqual(node.numXPU(), 8)
+            self.assertEqual(node.numIdleXPU(), 8)
+            self.assertEqual(cluster.getIdleXPU(node.name), 8)
+
+    def test_clos_bad(self):
+        """
+        Test properties of a bad Clos model.
+        """
+        self.assertRaises(NotImplementedError, build, TopoType.CLOS, "test", (4,), 8)
+        self.assertRaises(
+            NotImplementedError, build, TopoType.CLOS, "test", (4, 4, 4, 4), 8
+        )
+        self.assertRaises(ValueError, build, TopoType.CLOS, "test", (4, 4, 4), 0)

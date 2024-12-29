@@ -173,9 +173,6 @@ def build(
         # Only 1-tier and 2-tier Clos are currently supported.
         if len(dimension) != 2 and len(dimension) != 3:
             raise NotImplementedError(f"Dimension not supported in Clos.")
-        # 1-tier Clos must have only 1 tier-0 switch.
-        if len(dimension) == 2 and dimension[1] != 1:
-            raise ValueError("1-tier Clos must have only 1 tier-0 switch.")
         num_node, num_t0, num_t1 = dimension if len(dimension) == 3 else (*dimension, 0)
         cluster = build_clos_model(
             name=name,
