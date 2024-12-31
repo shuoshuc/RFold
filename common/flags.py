@@ -30,11 +30,16 @@ C2_TRACE = "WorkloadGen/data/c2_trace.csv"
 C1_MODEL = "Cluster/models/c1.json"
 C2_MODEL = "Cluster/models/c2.json"
 
-# Scheduling policy to use.
-SCHED_POLICY = "simplefit"
-
 # Path to the cluster spec file.
 MODEL_FILE = C1_MODEL
 
 # The trace to use.
 TRACE_NAME = C1_TRACE
+
+# Number of reserved ports on each T1 switch.
+# This is to model further scaling (T1 connecting to T2), even though T2 switches
+# are not really listed in the cluster spec.
+T1_RESERVED_PORTS = 0
+
+# Scheduling policy to use.
+SCHED_POLICY = "simplefit"

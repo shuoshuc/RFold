@@ -1,74 +1,1621 @@
 {
     "name": "c2",
     "topology": "CLOS",
-    "dimx": 8,
-    "dimy": 1,
-    "dimz": 0,
+    "dimx": 4,
+    "dimy": 4,
+    "dimz": 4,
     "total_nodes": 8,
+    "num_pods": 2,
     "nodes": [
         {
-            "name": "t0-n0",
-            "num_xpu": 8,
+            "name": "pod0-n0",
+            "num_xpu": 4,
             "coordinates": [
                 0,
                 0
+            ],
+            "ports": [
+                {
+                    "name": "pod0-n0-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n0-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n0-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n0-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                }
             ]
         },
         {
-            "name": "t0-n1",
-            "num_xpu": 8,
+            "name": "pod0-n1",
+            "num_xpu": 4,
+            "coordinates": [
+                0,
+                1
+            ],
+            "ports": [
+                {
+                    "name": "pod0-n1-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n1-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n1-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n1-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "pod0-n2",
+            "num_xpu": 4,
+            "coordinates": [
+                0,
+                2
+            ],
+            "ports": [
+                {
+                    "name": "pod0-n2-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n2-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n2-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n2-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "pod0-n3",
+            "num_xpu": 4,
+            "coordinates": [
+                0,
+                3
+            ],
+            "ports": [
+                {
+                    "name": "pod0-n3-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n3-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n3-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-n3-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "pod1-n0",
+            "num_xpu": 4,
             "coordinates": [
                 1,
                 0
+            ],
+            "ports": [
+                {
+                    "name": "pod1-n0-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n0-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n0-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n0-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                }
             ]
         },
         {
-            "name": "t0-n2",
-            "num_xpu": 8,
+            "name": "pod1-n1",
+            "num_xpu": 4,
             "coordinates": [
-                2,
-                0
+                1,
+                1
+            ],
+            "ports": [
+                {
+                    "name": "pod1-n1-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n1-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n1-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n1-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                }
             ]
         },
         {
-            "name": "t0-n3",
-            "num_xpu": 8,
+            "name": "pod1-n2",
+            "num_xpu": 4,
             "coordinates": [
-                3,
-                0
+                1,
+                2
+            ],
+            "ports": [
+                {
+                    "name": "pod1-n2-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n2-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n2-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n2-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                }
             ]
         },
         {
-            "name": "t0-n4",
-            "num_xpu": 8,
+            "name": "pod1-n3",
+            "num_xpu": 4,
             "coordinates": [
-                4,
+                1,
+                3
+            ],
+            "ports": [
+                {
+                    "name": "pod1-n3-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n3-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n3-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-n3-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                }
+            ]
+        }
+    ],
+    "tier0": [
+        {
+            "name": "pod0-t0",
+            "coordinates": [
+                0,
                 0
+            ],
+            "tier": 0,
+            "ports": [
+                {
+                    "name": "pod0-t0-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t0-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t0-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t0-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t0-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t0-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t0-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t0-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
             ]
         },
         {
-            "name": "t0-n5",
-            "num_xpu": 8,
+            "name": "pod0-t1",
             "coordinates": [
-                5,
-                0
+                0,
+                1
+            ],
+            "tier": 0,
+            "ports": [
+                {
+                    "name": "pod0-t1-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t1-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t1-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t1-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t1-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t1-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t1-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t1-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
             ]
         },
         {
-            "name": "t0-n6",
-            "num_xpu": 8,
+            "name": "pod0-t2",
             "coordinates": [
-                6,
-                0
+                0,
+                2
+            ],
+            "tier": 0,
+            "ports": [
+                {
+                    "name": "pod0-t2-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t2-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t2-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t2-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t2-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t2-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t2-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t2-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
             ]
         },
         {
-            "name": "t0-n7",
-            "num_xpu": 8,
+            "name": "pod0-t3",
             "coordinates": [
-                7,
-                0
+                0,
+                3
+            ],
+            "tier": 0,
+            "ports": [
+                {
+                    "name": "pod0-t3-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t3-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t3-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t3-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t3-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t3-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t3-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod0-t3-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
             ]
+        },
+        {
+            "name": "pod1-t0",
+            "coordinates": [
+                1,
+                0
+            ],
+            "tier": 0,
+            "ports": [
+                {
+                    "name": "pod1-t0-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t0-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t0-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t0-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t0-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t0-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t0-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t0-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "pod1-t1",
+            "coordinates": [
+                1,
+                1
+            ],
+            "tier": 0,
+            "ports": [
+                {
+                    "name": "pod1-t1-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t1-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t1-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t1-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t1-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t1-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t1-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t1-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "pod1-t2",
+            "coordinates": [
+                1,
+                2
+            ],
+            "tier": 0,
+            "ports": [
+                {
+                    "name": "pod1-t2-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t2-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t2-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t2-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t2-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t2-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t2-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t2-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "pod1-t3",
+            "coordinates": [
+                1,
+                3
+            ],
+            "tier": 0,
+            "ports": [
+                {
+                    "name": "pod1-t3-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t3-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t3-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t3-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t3-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t3-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t3-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "pod1-t3-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
+            ]
+        }
+    ],
+    "tier1": [
+        {
+            "name": "s0",
+            "coordinates": [
+                0
+            ],
+            "tier": 1,
+            "ports": [
+                {
+                    "name": "s0-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s0-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s0-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s0-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s0-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s0-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s0-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s0-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "s1",
+            "coordinates": [
+                1
+            ],
+            "tier": 1,
+            "ports": [
+                {
+                    "name": "s1-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s1-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s1-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s1-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s1-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s1-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s1-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s1-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "s2",
+            "coordinates": [
+                2
+            ],
+            "tier": 1,
+            "ports": [
+                {
+                    "name": "s2-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s2-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s2-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s2-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s2-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s2-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s2-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s2-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
+            ]
+        },
+        {
+            "name": "s3",
+            "coordinates": [
+                3
+            ],
+            "tier": 1,
+            "ports": [
+                {
+                    "name": "s3-p0",
+                    "index": 0,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s3-p1",
+                    "index": 1,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s3-p2",
+                    "index": 2,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s3-p3",
+                    "index": 3,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s3-p4",
+                    "index": 4,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s3-p5",
+                    "index": 5,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s3-p6",
+                    "index": 6,
+                    "speed_gbps": 400
+                },
+                {
+                    "name": "s3-p7",
+                    "index": 7,
+                    "speed_gbps": 400
+                }
+            ]
+        }
+    ],
+    "links": [
+        {
+            "name": "pod0-t0-p0:pod0-n0-p0",
+            "src": "pod0-t0-p0",
+            "dst": "pod0-n0-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n0-p0:pod0-t0-p0",
+            "src": "pod0-n0-p0",
+            "dst": "pod0-t0-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t0-p2:pod0-n1-p0",
+            "src": "pod0-t0-p2",
+            "dst": "pod0-n1-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n1-p0:pod0-t0-p2",
+            "src": "pod0-n1-p0",
+            "dst": "pod0-t0-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t0-p4:pod0-n2-p0",
+            "src": "pod0-t0-p4",
+            "dst": "pod0-n2-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n2-p0:pod0-t0-p4",
+            "src": "pod0-n2-p0",
+            "dst": "pod0-t0-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t0-p6:pod0-n3-p0",
+            "src": "pod0-t0-p6",
+            "dst": "pod0-n3-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n3-p0:pod0-t0-p6",
+            "src": "pod0-n3-p0",
+            "dst": "pod0-t0-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t1-p0:pod0-n0-p1",
+            "src": "pod0-t1-p0",
+            "dst": "pod0-n0-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n0-p1:pod0-t1-p0",
+            "src": "pod0-n0-p1",
+            "dst": "pod0-t1-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t1-p2:pod0-n1-p1",
+            "src": "pod0-t1-p2",
+            "dst": "pod0-n1-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n1-p1:pod0-t1-p2",
+            "src": "pod0-n1-p1",
+            "dst": "pod0-t1-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t1-p4:pod0-n2-p1",
+            "src": "pod0-t1-p4",
+            "dst": "pod0-n2-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n2-p1:pod0-t1-p4",
+            "src": "pod0-n2-p1",
+            "dst": "pod0-t1-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t1-p6:pod0-n3-p1",
+            "src": "pod0-t1-p6",
+            "dst": "pod0-n3-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n3-p1:pod0-t1-p6",
+            "src": "pod0-n3-p1",
+            "dst": "pod0-t1-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t2-p0:pod0-n0-p2",
+            "src": "pod0-t2-p0",
+            "dst": "pod0-n0-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n0-p2:pod0-t2-p0",
+            "src": "pod0-n0-p2",
+            "dst": "pod0-t2-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t2-p2:pod0-n1-p2",
+            "src": "pod0-t2-p2",
+            "dst": "pod0-n1-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n1-p2:pod0-t2-p2",
+            "src": "pod0-n1-p2",
+            "dst": "pod0-t2-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t2-p4:pod0-n2-p2",
+            "src": "pod0-t2-p4",
+            "dst": "pod0-n2-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n2-p2:pod0-t2-p4",
+            "src": "pod0-n2-p2",
+            "dst": "pod0-t2-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t2-p6:pod0-n3-p2",
+            "src": "pod0-t2-p6",
+            "dst": "pod0-n3-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n3-p2:pod0-t2-p6",
+            "src": "pod0-n3-p2",
+            "dst": "pod0-t2-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t3-p0:pod0-n0-p3",
+            "src": "pod0-t3-p0",
+            "dst": "pod0-n0-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n0-p3:pod0-t3-p0",
+            "src": "pod0-n0-p3",
+            "dst": "pod0-t3-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t3-p2:pod0-n1-p3",
+            "src": "pod0-t3-p2",
+            "dst": "pod0-n1-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n1-p3:pod0-t3-p2",
+            "src": "pod0-n1-p3",
+            "dst": "pod0-t3-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t3-p4:pod0-n2-p3",
+            "src": "pod0-t3-p4",
+            "dst": "pod0-n2-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n2-p3:pod0-t3-p4",
+            "src": "pod0-n2-p3",
+            "dst": "pod0-t3-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t3-p6:pod0-n3-p3",
+            "src": "pod0-t3-p6",
+            "dst": "pod0-n3-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-n3-p3:pod0-t3-p6",
+            "src": "pod0-n3-p3",
+            "dst": "pod0-t3-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t0-p0:pod1-n0-p0",
+            "src": "pod1-t0-p0",
+            "dst": "pod1-n0-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n0-p0:pod1-t0-p0",
+            "src": "pod1-n0-p0",
+            "dst": "pod1-t0-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t0-p2:pod1-n1-p0",
+            "src": "pod1-t0-p2",
+            "dst": "pod1-n1-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n1-p0:pod1-t0-p2",
+            "src": "pod1-n1-p0",
+            "dst": "pod1-t0-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t0-p4:pod1-n2-p0",
+            "src": "pod1-t0-p4",
+            "dst": "pod1-n2-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n2-p0:pod1-t0-p4",
+            "src": "pod1-n2-p0",
+            "dst": "pod1-t0-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t0-p6:pod1-n3-p0",
+            "src": "pod1-t0-p6",
+            "dst": "pod1-n3-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n3-p0:pod1-t0-p6",
+            "src": "pod1-n3-p0",
+            "dst": "pod1-t0-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t1-p0:pod1-n0-p1",
+            "src": "pod1-t1-p0",
+            "dst": "pod1-n0-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n0-p1:pod1-t1-p0",
+            "src": "pod1-n0-p1",
+            "dst": "pod1-t1-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t1-p2:pod1-n1-p1",
+            "src": "pod1-t1-p2",
+            "dst": "pod1-n1-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n1-p1:pod1-t1-p2",
+            "src": "pod1-n1-p1",
+            "dst": "pod1-t1-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t1-p4:pod1-n2-p1",
+            "src": "pod1-t1-p4",
+            "dst": "pod1-n2-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n2-p1:pod1-t1-p4",
+            "src": "pod1-n2-p1",
+            "dst": "pod1-t1-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t1-p6:pod1-n3-p1",
+            "src": "pod1-t1-p6",
+            "dst": "pod1-n3-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n3-p1:pod1-t1-p6",
+            "src": "pod1-n3-p1",
+            "dst": "pod1-t1-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t2-p0:pod1-n0-p2",
+            "src": "pod1-t2-p0",
+            "dst": "pod1-n0-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n0-p2:pod1-t2-p0",
+            "src": "pod1-n0-p2",
+            "dst": "pod1-t2-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t2-p2:pod1-n1-p2",
+            "src": "pod1-t2-p2",
+            "dst": "pod1-n1-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n1-p2:pod1-t2-p2",
+            "src": "pod1-n1-p2",
+            "dst": "pod1-t2-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t2-p4:pod1-n2-p2",
+            "src": "pod1-t2-p4",
+            "dst": "pod1-n2-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n2-p2:pod1-t2-p4",
+            "src": "pod1-n2-p2",
+            "dst": "pod1-t2-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t2-p6:pod1-n3-p2",
+            "src": "pod1-t2-p6",
+            "dst": "pod1-n3-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n3-p2:pod1-t2-p6",
+            "src": "pod1-n3-p2",
+            "dst": "pod1-t2-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t3-p0:pod1-n0-p3",
+            "src": "pod1-t3-p0",
+            "dst": "pod1-n0-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n0-p3:pod1-t3-p0",
+            "src": "pod1-n0-p3",
+            "dst": "pod1-t3-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t3-p2:pod1-n1-p3",
+            "src": "pod1-t3-p2",
+            "dst": "pod1-n1-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n1-p3:pod1-t3-p2",
+            "src": "pod1-n1-p3",
+            "dst": "pod1-t3-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t3-p4:pod1-n2-p3",
+            "src": "pod1-t3-p4",
+            "dst": "pod1-n2-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n2-p3:pod1-t3-p4",
+            "src": "pod1-n2-p3",
+            "dst": "pod1-t3-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t3-p6:pod1-n3-p3",
+            "src": "pod1-t3-p6",
+            "dst": "pod1-n3-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-n3-p3:pod1-t3-p6",
+            "src": "pod1-n3-p3",
+            "dst": "pod1-t3-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s0-p0:pod0-t0-p1",
+            "src": "s0-p0",
+            "dst": "pod0-t0-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t0-p1:s0-p0",
+            "src": "pod0-t0-p1",
+            "dst": "s0-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s0-p1:pod0-t1-p1",
+            "src": "s0-p1",
+            "dst": "pod0-t1-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t1-p1:s0-p1",
+            "src": "pod0-t1-p1",
+            "dst": "s0-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s0-p2:pod0-t2-p1",
+            "src": "s0-p2",
+            "dst": "pod0-t2-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t2-p1:s0-p2",
+            "src": "pod0-t2-p1",
+            "dst": "s0-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s0-p3:pod0-t3-p1",
+            "src": "s0-p3",
+            "dst": "pod0-t3-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t3-p1:s0-p3",
+            "src": "pod0-t3-p1",
+            "dst": "s0-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s0-p4:pod1-t0-p1",
+            "src": "s0-p4",
+            "dst": "pod1-t0-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t0-p1:s0-p4",
+            "src": "pod1-t0-p1",
+            "dst": "s0-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s0-p5:pod1-t1-p1",
+            "src": "s0-p5",
+            "dst": "pod1-t1-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t1-p1:s0-p5",
+            "src": "pod1-t1-p1",
+            "dst": "s0-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s0-p6:pod1-t2-p1",
+            "src": "s0-p6",
+            "dst": "pod1-t2-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t2-p1:s0-p6",
+            "src": "pod1-t2-p1",
+            "dst": "s0-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s0-p7:pod1-t3-p1",
+            "src": "s0-p7",
+            "dst": "pod1-t3-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t3-p1:s0-p7",
+            "src": "pod1-t3-p1",
+            "dst": "s0-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s1-p0:pod0-t0-p3",
+            "src": "s1-p0",
+            "dst": "pod0-t0-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t0-p3:s1-p0",
+            "src": "pod0-t0-p3",
+            "dst": "s1-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s1-p1:pod0-t1-p3",
+            "src": "s1-p1",
+            "dst": "pod0-t1-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t1-p3:s1-p1",
+            "src": "pod0-t1-p3",
+            "dst": "s1-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s1-p2:pod0-t2-p3",
+            "src": "s1-p2",
+            "dst": "pod0-t2-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t2-p3:s1-p2",
+            "src": "pod0-t2-p3",
+            "dst": "s1-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s1-p3:pod0-t3-p3",
+            "src": "s1-p3",
+            "dst": "pod0-t3-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t3-p3:s1-p3",
+            "src": "pod0-t3-p3",
+            "dst": "s1-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s1-p4:pod1-t0-p3",
+            "src": "s1-p4",
+            "dst": "pod1-t0-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t0-p3:s1-p4",
+            "src": "pod1-t0-p3",
+            "dst": "s1-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s1-p5:pod1-t1-p3",
+            "src": "s1-p5",
+            "dst": "pod1-t1-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t1-p3:s1-p5",
+            "src": "pod1-t1-p3",
+            "dst": "s1-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s1-p6:pod1-t2-p3",
+            "src": "s1-p6",
+            "dst": "pod1-t2-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t2-p3:s1-p6",
+            "src": "pod1-t2-p3",
+            "dst": "s1-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s1-p7:pod1-t3-p3",
+            "src": "s1-p7",
+            "dst": "pod1-t3-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t3-p3:s1-p7",
+            "src": "pod1-t3-p3",
+            "dst": "s1-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s2-p0:pod0-t0-p5",
+            "src": "s2-p0",
+            "dst": "pod0-t0-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t0-p5:s2-p0",
+            "src": "pod0-t0-p5",
+            "dst": "s2-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s2-p1:pod0-t1-p5",
+            "src": "s2-p1",
+            "dst": "pod0-t1-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t1-p5:s2-p1",
+            "src": "pod0-t1-p5",
+            "dst": "s2-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s2-p2:pod0-t2-p5",
+            "src": "s2-p2",
+            "dst": "pod0-t2-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t2-p5:s2-p2",
+            "src": "pod0-t2-p5",
+            "dst": "s2-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s2-p3:pod0-t3-p5",
+            "src": "s2-p3",
+            "dst": "pod0-t3-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t3-p5:s2-p3",
+            "src": "pod0-t3-p5",
+            "dst": "s2-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s2-p4:pod1-t0-p5",
+            "src": "s2-p4",
+            "dst": "pod1-t0-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t0-p5:s2-p4",
+            "src": "pod1-t0-p5",
+            "dst": "s2-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s2-p5:pod1-t1-p5",
+            "src": "s2-p5",
+            "dst": "pod1-t1-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t1-p5:s2-p5",
+            "src": "pod1-t1-p5",
+            "dst": "s2-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s2-p6:pod1-t2-p5",
+            "src": "s2-p6",
+            "dst": "pod1-t2-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t2-p5:s2-p6",
+            "src": "pod1-t2-p5",
+            "dst": "s2-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s2-p7:pod1-t3-p5",
+            "src": "s2-p7",
+            "dst": "pod1-t3-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t3-p5:s2-p7",
+            "src": "pod1-t3-p5",
+            "dst": "s2-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s3-p0:pod0-t0-p7",
+            "src": "s3-p0",
+            "dst": "pod0-t0-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t0-p7:s3-p0",
+            "src": "pod0-t0-p7",
+            "dst": "s3-p0",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s3-p1:pod0-t1-p7",
+            "src": "s3-p1",
+            "dst": "pod0-t1-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t1-p7:s3-p1",
+            "src": "pod0-t1-p7",
+            "dst": "s3-p1",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s3-p2:pod0-t2-p7",
+            "src": "s3-p2",
+            "dst": "pod0-t2-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t2-p7:s3-p2",
+            "src": "pod0-t2-p7",
+            "dst": "s3-p2",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s3-p3:pod0-t3-p7",
+            "src": "s3-p3",
+            "dst": "pod0-t3-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod0-t3-p7:s3-p3",
+            "src": "pod0-t3-p7",
+            "dst": "s3-p3",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s3-p4:pod1-t0-p7",
+            "src": "s3-p4",
+            "dst": "pod1-t0-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t0-p7:s3-p4",
+            "src": "pod1-t0-p7",
+            "dst": "s3-p4",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s3-p5:pod1-t1-p7",
+            "src": "s3-p5",
+            "dst": "pod1-t1-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t1-p7:s3-p5",
+            "src": "pod1-t1-p7",
+            "dst": "s3-p5",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s3-p6:pod1-t2-p7",
+            "src": "s3-p6",
+            "dst": "pod1-t2-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t2-p7:s3-p6",
+            "src": "pod1-t2-p7",
+            "dst": "s3-p6",
+            "speed_gbps": 400
+        },
+        {
+            "name": "s3-p7:pod1-t3-p7",
+            "src": "s3-p7",
+            "dst": "pod1-t3-p7",
+            "speed_gbps": 400
+        },
+        {
+            "name": "pod1-t3-p7:s3-p7",
+            "src": "pod1-t3-p7",
+            "dst": "s3-p7",
+            "speed_gbps": 400
         }
     ]
 }

@@ -45,3 +45,12 @@ def spec_parser(specfile: str) -> dict:
     """
     with open(specfile, "r") as f:
         return json.load(f)
+
+
+def dump_spec(spec: dict, specfile: str):
+    """
+    Dump the cluster spec to a file if `specfile` is specified.
+    """
+    if specfile:
+        with open(specfile, "w") as f:
+            json.dump(spec, f, indent=4)
