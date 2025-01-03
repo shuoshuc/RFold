@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 from common.flags import *
 from common.job import TopoType
@@ -394,7 +394,7 @@ def build_clos_model(
 def build(
     topo: TopoType,
     name: str,
-    dimension: tuple[int],
+    dimension: Union[tuple[int, int], tuple[int, int, int]],
     xpu_per_node: int,
     port_per_node: int,
     port_speed_gbps: float,
