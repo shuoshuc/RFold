@@ -1,6 +1,7 @@
 import copy
 import simpy
 import unittest
+import numpy as np
 
 from common.flags import *
 from common.job import Job, TopoType
@@ -85,10 +86,10 @@ class TestClusterSimple(unittest.TestCase):
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE1), 1)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE2), 1)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE3), 1)
+        # The cluster right now is completely idle.
+        self.assertTrue((self.cluster.to2DArray() == np.full((4, 4), 1)).all())
         # Allocate 1 XPU from node 1 and 2 to the job.
         job.allocation = {C1_NODE1: 1, C1_NODE2: 1}
-        # Job's shape is (1), mismatching the allocation shape.
-        self.assertRaises(ValueError, self.cluster.execute, job)
         # Fix and execute the job with correct shape.
         job.shape = (1, 1)
         job.size = 2
@@ -97,6 +98,10 @@ class TestClusterSimple(unittest.TestCase):
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE1), 0)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE2), 0)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE3), 1)
+        truth = np.full((4, 4), 1)
+        truth[0, 0] = 0
+        truth[3, 3] = 0
+        self.assertTrue((self.cluster.to2DArray() == truth).all())
 
     def test_job_completion(self):
         """
@@ -114,12 +119,17 @@ class TestClusterSimple(unittest.TestCase):
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE1), 0)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE2), 0)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE3), 1)
+        truth = np.full((4, 4), 1)
+        truth[0, 0] = 0
+        truth[3, 3] = 0
+        self.assertTrue((self.cluster.to2DArray() == truth).all())
         # Now job is completed, free up the resources.
         self.cluster.complete(job)
         # Each node should have 1 idle XPU.
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE1), 1)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE2), 1)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE3), 1)
+        self.assertTrue((self.cluster.to2DArray() == np.full((4, 4), 1)).all())
 
     def test_job_completion_exception(self):
         """

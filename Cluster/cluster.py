@@ -1,5 +1,7 @@
 import logging
 import simpy
+import numpy as np
+from numpy.typing import NDArray
 from typing import Optional, Union
 
 from common.job import Job, TopoType
@@ -121,15 +123,9 @@ class Cluster:
         logging.info(f"t = {self.env.now}, executing job {job.short_print()}")
         if not job.allocation:
             raise ValueError(f"Job {job.uuid} allocation info is missing.")
-        if len(job.shape) != len(job.allocation):
-            raise ValueError(
-                f"Job {job.uuid} shape and allocation mismatch: "
-                f"{job.shape} vs {job.allocation}."
-            )
         for node_id, num_xpu in job.allocation.items():
             self.nodes[node_id].alloc(num_xpu)
-        # TODO: break down the job into subjobs, send to nodes for execution.
-        # Update states.
+        self.visualize()
 
     def complete(self, job: Job):
         """
@@ -138,6 +134,7 @@ class Cluster:
         logging.info(f"t = {self.env.now}, job {job.short_print()} completed")
         for node_id, num_xpu in job.allocation.items():
             self.nodes[node_id].free(num_xpu)
+        self.visualize()
         # TODO: this method is called when a job completes at the theorectical completion
         # time. The actual completion time may be ahead or behind if we model failures or
         # runtime dynamics. Need to refactor this class to handle such cases.
@@ -173,6 +170,30 @@ class Cluster:
         """
         # TODO: cache the idle nodes.
         return len([n for n in self.nodes.values() if n.numIdleXPU() > 0])
+
+    def to2DArray(self) -> NDArray[np.float64]:
+        """
+        Return a 2D array representation of the node/xpu availability.
+        Each element corresponds to the number of idle XPUs on a node.
+        Note: this method only works for 2D mesh/torus topology.
+        """
+        if self.topo not in [TopoType.MESH2D, TopoType.T2D]:
+            raise TypeError(f"Topology {self.topo} is not supported.")
+
+        array = np.zeros((self.dimx, self.dimy))
+        for node in self.nodes.values():
+            array[node.dimx, node.dimy] = node.numIdleXPU()
+        return array
+
+    def visualize(self):
+        """
+        Visualize the cluster state.
+        """
+        array = np.rot90(self.to2DArray())
+        logging.info(f"Cluster state:")
+        for row in array:
+            logging.info(" ".join(map(str, map(int, row))))
+        logging.info("")
 
     # --------------------------------------------------
     # Graph-query type of methods for entity lookup.

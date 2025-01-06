@@ -151,7 +151,7 @@ class Node(BaseNode):
                 f"{n_xpu} vs {self.num_idle_xpu}."
             )
         self.num_idle_xpu -= n_xpu
-        logging.info(
+        logging.debug(
             f"Node {self.name} state: {self.numIdleXPU()} / {self.numXPU()} XPUs."
         )
 
@@ -165,7 +165,7 @@ class Node(BaseNode):
                 f"{self.num_idle_xpu} + {n_xpu} > {self.num_xpu}."
             )
         self.num_idle_xpu += n_xpu
-        logging.info(
+        logging.debug(
             f"Node {self.name} state: {self.numIdleXPU()} / {self.numXPU()} XPUs."
         )
 
