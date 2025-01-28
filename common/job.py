@@ -107,3 +107,15 @@ def SplitShape(shape: str, topo: TopoType) -> Tuple[Union[float, int], ...]:
     return tuple(
         map(lambda x: float(x) if FRAC_XPU else ceil(float(x)), shape.split(shape_delim))
     )
+
+
+def FormShape(shape: Tuple[Union[float, int], ...], topo: TopoType) -> str:
+    """
+    Formats the given shape tuple into a string.
+    E.g., (1, 1, 1, 1) -> 1+1+1+1
+    """
+    # Torus shape is separated by 'x', while Clos shape is separated by '+'.
+    shape_delim = "+" if topo == TopoType.CLOS else "x"
+    # Unlike SplitShape(), there is no need to worry about fractional XPUs,
+    # because the given shape from a trace should already be aware of that.
+    return shape_delim.join(map(str, shape))

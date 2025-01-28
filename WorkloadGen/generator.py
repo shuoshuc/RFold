@@ -1,14 +1,17 @@
 import copy
 import logging
 import numpy as np
+import random
 import simpy
 from collections.abc import Iterator
 from io import StringIO
 from scipy.stats import rv_discrete
 from typing import Union
 
+from common.flags import *
 from common.job import TopoType, Job, SplitShape
 from common.simpleUUID import SimpleUUID
+from common.utils import extract_duration
 from ClusterManager.manager import ClusterManager
 
 
@@ -24,6 +27,7 @@ class WorkloadGenerator:
         arrival_time_file: Union[str, StringIO],
         job_size_file: Union[str, StringIO],
         cluster_mgr: ClusterManager,
+        dur_trace: str = ACME_TRACE,
     ):
         self.env = env
         self.cluster_mgr = cluster_mgr
@@ -35,6 +39,8 @@ class WorkloadGenerator:
         self._loadIATDist(arrival_time_file)
         self._loadSizeDist(job_size_file)
         self.uuidgen = SimpleUUID()
+        self.cached_duration = extract_duration(dur_trace)
+        random.seed(42)
 
     def _loadSizeDist(self, filename: Union[str, StringIO]):
         """
@@ -64,7 +70,7 @@ class WorkloadGenerator:
         if is_file:
             f.close()
         for i, (job_key, p) in enumerate(accumulated_prob.items()):
-            topology, slice_shape, _, duration = job_key
+            topology, slice_shape, job_size, duration = job_key
             # Random variable only needs a list of values and their probabilities.
             # Hence, the specific job info is tracked by the `self.jobs` dict.
             self.dist_size.append([i, float(p) / 100])
@@ -74,7 +80,8 @@ class WorkloadGenerator:
                 arrival_time_sec=0,
                 topology=topology,
                 shape=shape_tup,
-                size=sum(shape_tup),
+                # TODO: handle the case when job size is a fraction.
+                size=int(job_size),
                 duration_sec=duration,
             )
         slice_ids, probs = zip(*self.dist_size)
@@ -110,18 +117,31 @@ class WorkloadGenerator:
             probs = np.array(probs) / sum(probs)
         self.rv_iat = rv_discrete(values=(iats, probs))
 
-    def run(self) -> Iterator[simpy.events.Timeout]:
+    def run(self, stop_time: float = None) -> Iterator[simpy.events.Timeout]:
         """
         Generates jobs indefinitely and enqueues them.
+
+        Parameters:
+            stop_time: stop generating jobs when trace duration hits stop time mark.
         """
         while True:
-            iat = self.rv_iat.rvs(size=1)[0]
+            iat = float(round(self.rv_iat.rvs(size=1)[0]))
             j = self.rv_size.rvs(size=1)[0]
             new_job = copy.deepcopy(self.jobs[j])
             new_job.uuid = self.uuidgen.fetch()
             new_job.arrival_time_sec = self.abs_time_sec
+            # Some job distributions have new info about duration.
+            # To handle this, use duration from another trace.
+            if new_job.duration_sec == 0:
+                new_job.duration_sec = random.choice(self.cached_duration)
+            # Conditionally ignore twisted torus.
+            if IGNORE_TWIST and new_job.topology == TopoType.T3D_T:
+                new_job.topology = TopoType.T3D_NT
 
             yield self.env.timeout(new_job.arrival_time_sec - self.env.now)
             self.cluster_mgr.submitJob(new_job)
 
             self.abs_time_sec += iat
+            # If a stop time is provided, stop trace generation when it hits the mark.
+            if stop_time and self.abs_time_sec > stop_time:
+                break

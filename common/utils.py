@@ -1,9 +1,12 @@
+import csv
 import json
 import logging
 import simpy
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
+
+from common.job import FormShape
 
 
 class Signal:
@@ -105,3 +108,53 @@ def viz3D(dimx: int, dimy: int, dimz: int, array: NDArray[np.float64]):
     # Set the aspect of the plot to be equal
     ax.set_box_aspect([1, 1, 0.9])
     plt.show()
+
+
+def extract_duration(csv_path):
+    durations = []
+    with open(csv_path, mode="r") as file:
+        csv_reader = csv.reader(file)
+        for row in csv_reader:
+            # Skips the comment line.
+            if row[0].startswith("#"):
+                continue
+            # Last column must be job duration in seconds.
+            duration = float(row[-1])
+            durations.append(duration)
+    return durations
+
+
+def job_stats_to_trace(stats: dict, trace_output: str):
+    """
+    Convert job stats exported from ClusterManager to a trace file.
+    """
+    if not stats or not trace_output:
+        raise ValueError("Invalid input to output to trace.")
+
+    trace = []
+    for job in stats.values():
+        logging.info(f"{job.stats()}")
+        trace.append(
+            [
+                job.uuid,
+                job.arrival_time_sec,
+                job.topology.name,
+                FormShape(job.shape, job.topology),
+                job.size,
+                job.duration_sec,
+            ]
+        )
+
+    with open(trace_output, mode="w") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "#job id",
+                "arrival time (sec)",
+                "topology",
+                "shape",
+                "size",
+                "duration (sec)",
+            ]
+        )
+        writer.writerows(trace)

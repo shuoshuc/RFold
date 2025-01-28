@@ -45,3 +45,6 @@ T1_RESERVED_PORTS = 0
 
 # Scheduling policy to use.
 SCHED_POLICY = "firstfit"
+
+# Whether to ignore twisted torus and treat them as normal torus.
+IGNORE_TWIST = True
