@@ -33,19 +33,23 @@ class TraceReplay:
                 # Skips the comment line.
                 if line.startswith("#"):
                     continue
-                # Ignore the job size in the trace because the size could become different depending
-                # on whether fractional XPUs are allowed.
-                jid, arrival_time_sec, topo_type, shape, _, duration = line.strip().split(
-                    ","
+                jid, arrival_time_sec, topo_type, shape, size, duration = (
+                    line.strip().split(",")
                 )
                 shape_tup = SplitShape(shape, TopoType[topo_type])
+                # Job size could become different than the size from trace if fractional
+                # XPUs are allowed. So disable for now.
+                if float(size) != int(float(size)):
+                    raise NotImplementedError(
+                        "Job with fractional size is not yet supported."
+                    )
                 self.jobs.append(
                     Job(
                         uuid=int(jid),
                         arrival_time_sec=float(arrival_time_sec),
                         topology=TopoType[topo_type],
                         shape=shape_tup,
-                        size=sum(shape_tup),
+                        size=int(size),
                         duration_sec=float(duration),
                     )
                 )

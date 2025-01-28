@@ -1,6 +1,9 @@
 import json
 import logging
 import simpy
+import matplotlib.pyplot as plt
+import numpy as np
+from numpy.typing import NDArray
 
 
 class Signal:
@@ -54,3 +57,51 @@ def dump_spec(spec: dict, specfile: str):
     if specfile:
         with open(specfile, "w") as f:
             json.dump(spec, f, indent=4)
+
+
+def viz3D(dimx: int, dimy: int, dimz: int, array: NDArray[np.float64]):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+
+    # Generate coordinates for the corners of the cube
+    x, y, z = np.meshgrid(np.arange(dimx), np.arange(dimy), np.arange(dimz))
+
+    # Plot circles at each corner
+    for i in range(dimx):
+        for j in range(dimy):
+            for k in range(dimz):
+                alpha = 1 if array[i, j, k] > 0 else 0.2
+                ax.scatter(i, j, k, s=100, alpha=alpha)
+
+    # Connect circles with lines
+    for i in range(dimx):
+        for j in range(dimy):
+            for k in range(dimz):
+                if i < dimx - 1:
+                    ax.plot(
+                        [x[i, j, k], x[i + 1, j, k]],
+                        [y[i, j, k], y[i + 1, j, k]],
+                        [z[i, j, k], z[i + 1, j, k]],
+                        "k-",
+                        color="gray",
+                    )
+                if j < dimy - 1:
+                    ax.plot(
+                        [x[i, j, k], x[i, j + 1, k]],
+                        [y[i, j, k], y[i, j + 1, k]],
+                        [z[i, j, k], z[i, j + 1, k]],
+                        "k-",
+                        color="gray",
+                    )
+                if k < dimz - 1:
+                    ax.plot(
+                        [x[i, j, k], x[i, j, k + 1]],
+                        [y[i, j, k], y[i, j, k + 1]],
+                        [z[i, j, k], z[i, j, k + 1]],
+                        "k-",
+                        color="gray",
+                    )
+
+    # Set the aspect of the plot to be equal
+    ax.set_box_aspect([1, 1, 0.9])
+    plt.show()

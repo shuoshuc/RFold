@@ -17,6 +17,8 @@ DEFERRED_SCHED_SEC = 30
 SIM_DURATION_SEC = 400000
 
 # Some file path string constants.
+# C1: 2D Torus
+# C2: 2-tier Clos
 TPU_JOB_SIZES_DIST = "WorkloadGen/data/tpu_job_size.csv"
 TPU_ARRIVAL_TIME_DIST = "WorkloadGen/data/tpu_arrival_time.csv"
 PHILLY_TRACE = "WorkloadGen/data/philly_trace.csv"
@@ -42,4 +44,4 @@ TRACE_NAME = C1_TRACE
 T1_RESERVED_PORTS = 0
 
 # Scheduling policy to use.
-SCHED_POLICY = "simplefit"
+SCHED_POLICY = "firstfit"

@@ -66,8 +66,11 @@ class Job:
 
     def stats(self):
         return (
-            f"Job {self.uuid}, queueing={self.queueing_delay_sec}, "
-            f"completion={self.completion_time_sec}, slowdown={self.slowdown}"
+            f"Job {self.uuid}, t_arr={self.arrival_time_sec}, t_sch={self.sched_time_sec}, "
+            f"t_comp={self.completion_time_sec}, "
+            f"queue={self.queueing_delay_sec}, "
+            f"jct={self.completion_time_sec}, "
+            f"slowdown=({self.completion_time_sec}/{self.duration_sec})={self.slowdown}"
         )
 
 
