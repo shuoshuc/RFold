@@ -133,7 +133,6 @@ def job_stats_to_trace(stats: dict, trace_output: str):
 
     trace = []
     for job in stats.values():
-        logging.info(f"{job.stats()}")
         trace.append(
             [
                 job.uuid,
