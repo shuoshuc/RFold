@@ -34,17 +34,20 @@ def main():
         arrival_time_file=TPU_ARRIVAL_TIME_DIST,
         job_size_file=TPU_JOB_SIZES_DIST,
         cluster_mgr=mgr,
+        dur_trace=PHILLY_TRACE,
     )
 
     # Start simulation.
     logging.info("Simulation starts")
     env.process(mgr.schedule())
-    env.process(workload.run(stop_time=3600))
-    # Run for 100 hours.
-    env.run(until=36000)
+    # Simulate a limited duration workload.
+    env.process(workload.run(stop_time=SIM_DURATION_SEC))
+    env.run(until=SIM_DURATION_SEC)
     logging.info("Simulation completes")
+    mgr.sweepAllQueues()
 
     logging.info("----[Summary]-----")
+    mgr.job_stats = dict(sorted(mgr.job_stats.items()))
     for job in mgr.job_stats.values():
         logging.info(f"{job.stats()}")
 

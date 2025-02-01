@@ -423,9 +423,9 @@ class TestClusterManager(unittest.TestCase):
             # Job1 is running but incomplete, so statistics are not populated.
             self.env.run(until=2)
             self.assertEqual(job1_sched.sched_time_sec, 0)
-            self.assertEqual(job1_sched.queueing_delay_sec, None)
-            self.assertEqual(job1_sched.completion_time_sec, None)
-            self.assertEqual(job1_sched.slowdown, None)
+            self.assertIsNotNone(job1_sched.queueing_delay_sec)
+            self.assertIsNone(job1_sched.completion_time_sec)
+            self.assertIsNone(job1_sched.slowdown)
             self.assertEqual(self.mgr.job_stats, {})
             # Job1 has completed now.
             self.env.run(until=11)

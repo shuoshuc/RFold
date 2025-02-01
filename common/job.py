@@ -61,7 +61,7 @@ class Job:
     def short_print(self):
         return (
             f"[Job {self.uuid}, arrive t={self.arrival_time_sec}, "
-            f"size={self.size}, dur={self.duration_sec}]"
+            f"size={self.size}, shape={self.shape}, dur={self.duration_sec}]"
         )
 
     def stats(self):

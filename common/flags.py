@@ -11,10 +11,11 @@ LOG_LEVEL = "INFO"
 # Time duration (seconds) a job is deferred for scheduling.
 # This typically happens when the initial scheduling decision of
 # a job is reject. The deferral avoids busy looping.
-DEFERRED_SCHED_SEC = 30
+DEFERRED_SCHED_SEC = 600
 
 # Length of the simulation in seconds.
-SIM_DURATION_SEC = 400000
+# NB: use this to limit the length of the trace, but let the scheduler run until completion.
+SIM_DURATION_SEC = 18000
 
 # Some file path string constants.
 # C1: 2D Torus

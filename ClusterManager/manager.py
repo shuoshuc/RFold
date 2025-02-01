@@ -247,6 +247,7 @@ class ClusterManager:
         """
         # Scheduled time = time when the job is executed.
         job.sched_time_sec = self.env.now
+        job.queueing_delay_sec = job.sched_time_sec - job.arrival_time_sec
         # Once a job is scheduled, its priority changes from arrival time to desired
         # completion time.
         job.priority = self.env.now + job.duration_sec
@@ -269,10 +270,26 @@ class ClusterManager:
         """
         self.cluster.complete(job)
         # Update job statistics.
-        job.queueing_delay_sec = job.sched_time_sec - job.arrival_time_sec
         job.completion_time_sec = self.env.now - job.arrival_time_sec
         job.slowdown = job.completion_time_sec / job.duration_sec
         self.job_stats[job.uuid] = job
         # Notify the deferred queue guard to retry deferred jobs now that some resources
         # have been freed up.
         self.dq_guard_proc.interrupt()
+
+    def sweepAllQueues(self):
+        """
+        Sweeps all jobs (new, deferred, running) from the queues and add them
+        to `self.job_stats` for complete statistics.
+        This should only be called at the end of the simulation.
+        """
+        for queue in [
+            self.new_job_queue,
+            self.deferred_job_queue,
+            self.running_job_queue,
+        ]:
+            try:
+                while job := queue.get(block=False):
+                    self.job_stats[job.uuid] = job
+            except Empty:
+                continue
