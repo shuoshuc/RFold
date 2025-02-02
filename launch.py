@@ -57,11 +57,13 @@ def main():
     # Start simulation.
     logging.info("Simulation starts")
     env.process(mgr.schedule())
-    env.process(workload.run())
-    env.run(until=SIM_DURATION_SEC)
+    env.process(workload.run(stop_time=SIM_DURATION_SEC))
+    env.run()
     logging.info("Simulation completes")
+    mgr.sweepAllQueues()
 
     logging.info("----[Summary]-----")
+    mgr.job_stats = dict(sorted(mgr.job_stats.items()))
     for job in mgr.job_stats.values():
         logging.info(f"{job.stats()}")
 

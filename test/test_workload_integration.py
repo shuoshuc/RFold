@@ -50,6 +50,24 @@ class TestTraceReplayWithSimpy(unittest.TestCase):
         # The simulation time should have advanced to a very large time, e.g., t = 10000 sec.
         self.assertGreater(self.env.now, 10000.0)
 
+    def test_trace_stop(self):
+        self.assertEqual(len(self.trace.jobs), 111549)
+
+        self.env.process(self.trace.run(stop_time=1))
+        # Run simulation until completion. There should only be one job generated.
+        self.env.run()
+        self.mock_mgr.submitJob.assert_called_once_with(
+            Job(
+                uuid=0,
+                topology=TopoType.CLOS,
+                shape=(1,),
+                size=1,
+                arrival_time_sec=0.0,
+                duration_sec=3613033.0,
+                sched_time_sec=None,
+            )
+        )
+
 
 class TestWorkloadGenWithSimpy(unittest.TestCase):
 

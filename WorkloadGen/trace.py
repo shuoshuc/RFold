@@ -54,13 +54,20 @@ class TraceReplay:
                     )
                 )
 
-    def run(self) -> Iterator[simpy.events.Timeout]:
+    def run(self, stop_time: float = None) -> Iterator[simpy.events.Timeout]:
         """
         Fetch a job from the trace and submit it to the ClusterManager.
         Repeat until the jobs run out.
+
+        Parameters:
+            stop_time: stop generating jobs when trace duration hits stop time mark.
         """
         job = next(self.job_iter, None)
         while job:
+            # If a stop time is provided, stop trace generation when it hits the mark.
+            if stop_time and job.arrival_time_sec > stop_time:
+                break
+
             # For a future job, wait until it becomes current.
             yield self.env.timeout(job.arrival_time_sec - self.env.now)
             # Submit the job to the cluster manager.
