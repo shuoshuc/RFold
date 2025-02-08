@@ -2,6 +2,7 @@ import copy
 import simpy
 import unittest
 import numpy as np
+from hilbert import decode as hdecode
 
 from common.flags import *
 from common.job import Job, TopoType
@@ -17,7 +18,7 @@ JOB = Job(
     arrival_time_sec=0,
 )
 
-# Path to cluster C1's spec file.
+# Path to cluster C1's spec file. C1 is 2D torus.
 C1_SPEC = "Cluster/models/c1.json"
 
 # Some nodes in C1.
@@ -50,7 +51,19 @@ class TestClusterSimple(unittest.TestCase):
         for node in nodes:
             self.assertEqual(node.numXPU(), 1)
             self.assertEqual(node.numIdleXPU(), 1)
+            self.assertIsNotNone(node.getHilbertIndex())
             self.assertEqual(self.cluster.getIdleXPU(node.name), 1)
+
+    def test_node_hilbert_index(self):
+        """
+        Verify that nodes have correct Hilbert indices.
+        """
+        for node in self.cluster.allNodes().values():
+            self.assertIsNone(node.dimz)
+            # Decode the Hilbert index and check against the node's coordinates.
+            x, y = hdecode(node.getHilbertIndex(), 2, 2)[0]
+            self.assertEqual(node.dimx, x)
+            self.assertEqual(node.dimy, y)
 
     def test_node_xpu_alloc_free(self):
         """

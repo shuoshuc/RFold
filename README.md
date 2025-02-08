@@ -2,10 +2,10 @@ The MLOCS project leverages OCS to improve the ML cluster performance, reliabili
 
 # Requirements
 
-This simulator requires Python 3.9+ and Python packages `scipy`, `numpy`, `simpy`.
+This simulator requires Python 3.9+ and some Python packages.
 To install all dependencies, run:
 ```bash
-pip install 'scipy>=1.13.1' 'numpy>=2.0.2' 'simpy>=4.1.1' 'matplotlib>=3.9.2'
+pip install 'scipy>=1.13.1' 'numpy>=2.0.2' 'simpy>=4.1.1' 'matplotlib>=3.9.2' 'numpy-hilbert-curve>=1.0.1'
 ```
 
 # Folder structure

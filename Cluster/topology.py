@@ -1,5 +1,7 @@
 import logging
+import numpy as np
 from abc import ABC, abstractmethod
+from hilbert import encode as hencode
 from typing import Union
 
 from common.job import TopoType
@@ -85,12 +87,14 @@ class Node(BaseNode):
         num_xpu: int,
         topo: TopoType,
         coord: Union[tuple[int, int], tuple[int, int, int]],
+        bits_per_dim: int,
     ):
         """
         name: FQDN of the node
         num_xpu: number of XPUs on the node
         topo: topology type of the node
         coord: coordinates of the node in the cluster
+        bits_per_dim: number of bits per dimension for Hilbert curve encoding.
         """
         if num_xpu < 1:
             raise ValueError("Number of XPUs must be at least 1.")
@@ -104,24 +108,46 @@ class Node(BaseNode):
         self.dimx = None
         self.dimy = None
         self.dimz = None
-        self._unpackCoord(topo, coord)
+        # Index of the node on the Hilbert curve.
+        self.hilbert_index = None
+        self._unpackCoord(topo, coord, bits_per_dim)
         # List of member ports on the node.
         self._ports = []
 
     def _unpackCoord(
-        self, topo: TopoType, coord: Union[tuple[int, int], tuple[int, int, int]]
+        self,
+        topo: TopoType,
+        coord: Union[tuple[int, int], tuple[int, int, int]],
+        bits_per_dim: int,
     ):
         """
         Unpack the coordinates of the node based on the topology.
         """
         if topo == TopoType.CLOS:
             self.pod_id, self.node_id = coord
+        # Only set Hilbert index for 2D/3D topologies.
         elif topo in (TopoType.MESH2D, TopoType.T2D):
             self.dimx, self.dimy = coord
+            self._setHilbertIndex(coord=coord, ndim=2, bits_per_dim=bits_per_dim)
         elif topo in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
             self.dimx, self.dimy, self.dimz = coord
+            self._setHilbertIndex(coord=coord, ndim=3, bits_per_dim=bits_per_dim)
         else:
             logging.error(f"Unknown topology type: {topo}")
+
+    def _setHilbertIndex(
+        self,
+        coord: Union[tuple[int, int], tuple[int, int, int]],
+        ndim: int,
+        bits_per_dim: int,
+    ):
+        """
+        Set the Hilbert index of the node.
+        """
+        self.hilbert_index = hencode(np.array([coord]), ndim, bits_per_dim)
+
+    def getHilbertIndex(self):
+        return self.hilbert_index
 
     def addPort(self, port: Port):
         """

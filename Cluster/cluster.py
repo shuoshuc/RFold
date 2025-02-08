@@ -1,6 +1,8 @@
 import logging
 import simpy
 import numpy as np
+from itertools import product
+from math import ceil
 from numpy.typing import NDArray
 from typing import Optional, Union
 
@@ -8,7 +10,6 @@ from common.job import Job, TopoType
 from common.flags import *
 from common.utils import viz3D
 from Cluster.topology import Port, Link, Node, Switch
-from itertools import product
 
 
 class Cluster:
@@ -50,6 +51,11 @@ class Cluster:
         self.dimx = spec["dimx"]
         self.dimy = spec["dimy"]
         self.dimz = spec["dimz"]
+        # Compute the number of bits per dimension for Hilbert curve.
+        # For non-power-of-2 and irregular shapes, take the max and round up.
+        # E.g., for a 4x4x5 3D torus, max # nodes per dimension is 5.
+        # Round it to the nearest power-of-2, we get 8. So bits per dimension is log2(8)=3.
+        BITS_PER_DIM = ceil(np.log2(max(self.dimx, self.dimy, self.dimz)))
         # Clos-only field.
         if self.topo == TopoType.CLOS:
             self.num_pods = spec["num_pods"]
@@ -63,6 +69,7 @@ class Cluster:
                 num_xpu=n["num_xpu"],
                 topo=self.topo,
                 coord=n["coordinates"],
+                bits_per_dim=BITS_PER_DIM,
             )
             self.nodes[node_obj.name] = node_obj
             # (Clos-only) group nodes into pods.
@@ -172,9 +179,9 @@ class Cluster:
 
     def toArray(self) -> NDArray[np.float64]:
         """
-        Return a 2D array representation of the node/xpu availability.
+        Return a 2D/3D array representation of the node/xpu availability.
         Each element corresponds to the number of idle XPUs on a node.
-        Note: this method only works for 2D mesh/torus topology.
+        Note: this method only works for 2D/3D mesh/torus topology.
         """
         if self.topo in [TopoType.MESH2D, TopoType.T2D]:
             array = np.zeros((self.dimx, self.dimy))
