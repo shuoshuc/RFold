@@ -3,6 +3,7 @@ import random
 import simpy
 import numpy as np
 from enum import Enum
+from hilbert import decode as hdecode
 from numpy.typing import NDArray
 from typing import Optional, Tuple
 
@@ -191,14 +192,9 @@ class SchedulingPolicy:
         return req_node_cnt <= self.cluster.totalIdleNodes()
 
     def _firstfit(self, job: Job) -> Tuple[SchedDecision, Job]:
-        # Jobs that fail the total XPU check get rejected.
-        if not self._check_total_xpu(job):
-            logging.debug(f"Job {job.uuid} rejected, insufficient total number of XPUs.")
-            return SchedDecision.REJECT, job
-        if not self._check_total_node(job):
-            logging.debug(f"Job {job.uuid} rejected, insufficient number of idle nodes.")
-            return SchedDecision.REJECT, job
-
+        """
+        First-fit scheduling policy.
+        """
         # TODO: generalize to other topologies.
         if job.topology in (TopoType.CLOS,):
             logging.debug(f"Job {job.uuid} rejected, unsupported topology.")
@@ -209,6 +205,52 @@ class SchedulingPolicy:
         elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
             return self._fit_3d(self.cluster.toArray(), job)
 
+    def _slurm_hilbert(self, job: Job) -> Tuple[SchedDecision, Job]:
+        """
+        The SLURM scheduling policy using Hilbert curve. Each node in N-dimensional topology
+        is mapping to a linear curve using the Hilbert index. Nodes that are close to each other
+        on the Hilbert curve are allocated to the job.
+        """
+        # TODO: generalize to other topologies.
+        if job.topology in (TopoType.CLOS,):
+            logging.debug(f"Job {job.uuid} rejected, unsupported topology.")
+            return SchedDecision.REJECT, job
+
+        avail_nodes = self.cluster.linearAvail()
+        best_start, best_range = None, float("inf")
+
+        # Try to find the best contiguous allocation, where "best" is defined as
+        # the smallest range in Hilbert index. This implies a tight fit with
+        # low communication overhead.
+        for i in range(len(avail_nodes) - job.size + 1):
+            start = avail_nodes[i]
+            end = avail_nodes[i + job.size - 1]
+            range_size = end - start
+
+            if range_size < best_range:
+                best_start, best_range = i, range_size
+
+        # Allocate the best block if found.
+        if best_start is not None:
+            for index in avail_nodes[best_start : best_start + job.size]:
+                if job.topology in (TopoType.MESH2D, TopoType.T2D):
+                    x, y = hdecode(index, 2, self.cluster.bits_per_dim)[0]
+                    # Make sure to handle wrap-around indices for torus.
+                    job.allocation[
+                        f"x{x % self.cluster.dimx}-y{y % self.cluster.dimy}"
+                    ] = 1
+                elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
+                    x, y, z = hdecode(index, 3, self.cluster.bits_per_dim)[0]
+                    # Make sure to handle wrap-around indices for torus.
+                    job.allocation[
+                        f"x{x % self.cluster.dimx}-"
+                        f"y{y % self.cluster.dimy}-"
+                        f"z{z % self.cluster.dimz}"
+                    ] = 1
+            return SchedDecision.ADMIT, job
+
+        return SchedDecision.REJECT, job
+
     def place(self, job: Job, policy: str = SCHED_POLICY) -> Tuple[SchedDecision, Job]:
         """
         Make a scheduling decision for a job. Note that the job (e.g., shape, duration)
@@ -218,10 +260,18 @@ class SchedulingPolicy:
         """
         if job.topology != self.cluster.topo:
             raise ValueError("Job topology mismatches cluster topology.")
+        # Jobs that fail the total XPU check get rejected.
+        if not self._check_total_xpu(job):
+            logging.debug(f"Job {job.uuid} rejected, insufficient total number of XPUs.")
+            return SchedDecision.REJECT, job
+        # Jobs that fail the total node check get rejected.
+        if not self._check_total_node(job):
+            logging.debug(f"Job {job.uuid} rejected, insufficient number of idle nodes.")
+            return SchedDecision.REJECT, job
 
         if policy == "firstfit":
             return self._firstfit(job)
-        elif policy == "simplefit":
-            pass
+        elif policy == "slurm_hilbert":
+            return self._slurm_hilbert(job)
         # The default fallback is to reject all jobs.
         return SchedDecision.REJECT, job

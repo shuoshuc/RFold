@@ -55,7 +55,7 @@ class Cluster:
         # For non-power-of-2 and irregular shapes, take the max and round up.
         # E.g., for a 4x4x5 3D torus, max # nodes per dimension is 5.
         # Round it to the nearest power-of-2, we get 8. So bits per dimension is log2(8)=3.
-        BITS_PER_DIM = ceil(np.log2(max(self.dimx, self.dimy, self.dimz)))
+        self.bits_per_dim = ceil(np.log2(max(self.dimx, self.dimy, self.dimz)))
         # Clos-only field.
         if self.topo == TopoType.CLOS:
             self.num_pods = spec["num_pods"]
@@ -69,7 +69,7 @@ class Cluster:
                 num_xpu=n["num_xpu"],
                 topo=self.topo,
                 coord=n["coordinates"],
-                bits_per_dim=BITS_PER_DIM,
+                bits_per_dim=self.bits_per_dim,
             )
             self.nodes[node_obj.name] = node_obj
             # (Clos-only) group nodes into pods.
@@ -195,6 +195,25 @@ class Cluster:
             return array
         else:
             raise TypeError(f"Topology {self.topo} is not supported.")
+
+    def linearAvail(self) -> NDArray[np.float64]:
+        """
+        Return a 1D array representation of the node/xpu availability.
+        Nodes are linearized (sorted) based on their Hilbert index.
+        """
+        array = []
+        for node in self.nodes.values():
+            index, avail = node.getHilbertIndex(), node.numIdleXPU()
+            if not index:
+                raise ValueError(
+                    "Hilbert index not set for node or topology not supported."
+                )
+
+            # Construct the array of availability. For each node, if its idle XPUs
+            # are greater than 1, replicate the Hilbert index multiple times in the array.
+            array.extend([index] * avail)
+
+        return np.array(sorted(array))
 
     def visualize(self):
         """

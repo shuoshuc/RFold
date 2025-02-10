@@ -45,6 +45,7 @@ TRACE_NAME = C1_TRACE
 T1_RESERVED_PORTS = 0
 
 # Scheduling policy to use.
+# Available options: firstfit, slurm_hilbert.
 SCHED_POLICY = "firstfit"
 
 # Whether to ignore twisted torus and treat them as normal torus.

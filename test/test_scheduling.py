@@ -32,6 +32,8 @@ class TestScheduling(unittest.TestCase):
         Verify that the default decision for a job is rejection.
         """
         job = copy.deepcopy(JOB)
+        self.mock_cluster.totalIdleXPU.return_value = 1
+        self.mock_cluster.totalIdleNodes.return_value = 1
         # Scheduler invoked with unknown policy.
         decision, job_to_sched = self.sched.place(job, policy="unknown")
         self.assertEqual(decision, SchedDecision.REJECT)
@@ -150,3 +152,144 @@ class TestScheduling(unittest.TestCase):
             for y in range(2):
                 for z in [0, 1, 3]:
                     self.assertIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+
+    def test_slurm_hilbert_t2d(self):
+        """
+        Verify the behavior when using slurm_hilbert as the policy in 2D torus.
+        """
+        job = Job(
+            uuid=1,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=1000,
+            arrival_time_sec=0,
+        )
+
+        # Job topology and cluster mismatch, expect an exception.
+        self.assertRaises(ValueError, self.sched.place, job, "slurm_hilbert")
+
+        self.mock_cluster.topo = TopoType.T2D
+        self.mock_cluster.totalIdleXPU.return_value = 1
+        self.mock_cluster.totalIdleNodes.return_value = 1
+        # Insufficient total XPUs available, expect rejection.
+        decision, _ = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        self.mock_cluster.totalIdleXPU.return_value = job.size
+        # Insufficient total nodes available, expect rejection.
+        decision, _ = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        self.mock_cluster.totalIdleNodes.return_value = job.size
+        self.mock_cluster.dimx = 4
+        self.mock_cluster.dimy = 4
+        self.mock_cluster.bits_per_dim = 2
+        self.mock_cluster.linearAvail.return_value = np.array([])
+        # All nodes unavailable, expect rejection.
+        decision, _ = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        # [Admitted case 1] best fit with smallest range.
+        self.mock_cluster.linearAvail.return_value = np.array([1, 3, 4, 5, 6])
+        # Corresponding coordinates for nodes with Hilbert index [3, 4, 5, 6].
+        # Note that this is an L-shaped allocation.
+        coords = [(0, 1), (0, 2), (0, 3), (1, 3)]
+        # There are two feasible allocations, expect admission.
+        decision, job_to_sched = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(job_to_sched.allocation), 4)
+        for val in job_to_sched.allocation.values():
+            self.assertEqual(val, 1)
+        # Make sure slurm_hilbert picks the best feasible allocation, namely [3, 4, 5, 6].
+        for x, y in coords:
+            self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)
+
+        # [Admitted case 2] first fit with equally small range.
+        job_to_sched.allocation.clear()
+        self.mock_cluster.linearAvail.return_value = np.array([1, 2, 3, 4, 5])
+        # Corresponding coordinates for nodes with Hilbert index [1, 2, 3, 4].
+        coords = [(1, 0), (1, 1), (0, 1), (0, 2)]
+        # There are two feasible allocations, expect admission.
+        decision, job_to_sched = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(job_to_sched.allocation), 4)
+        for val in job_to_sched.allocation.values():
+            self.assertEqual(val, 1)
+        # Make sure slurm_hilbert picks the best feasible allocation, namely [1, 2, 3, 4].
+        for x, y in coords:
+            self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)
+
+    def test_slurm_hilbert_t3d(self):
+        """
+        Verify the behavior when using slurm_hilbert as the policy in 3D torus.
+        """
+        job = Job(
+            uuid=1,
+            topology=TopoType.T3D_NT,
+            shape=(2, 3, 1),
+            size=6,
+            duration_sec=1000,
+            arrival_time_sec=0,
+        )
+
+        # Job topology and cluster mismatch, expect an exception.
+        self.assertRaises(ValueError, self.sched.place, job, "slurm_hilbert")
+
+        self.mock_cluster.topo = TopoType.T3D_NT
+        self.mock_cluster.totalIdleXPU.return_value = 1
+        self.mock_cluster.totalIdleNodes.return_value = 1
+        # Insufficient total XPUs available, expect rejection.
+        decision, _ = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        self.mock_cluster.totalIdleXPU.return_value = job.size
+        # Insufficient total nodes available, expect rejection.
+        decision, _ = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        self.mock_cluster.totalIdleNodes.return_value = job.size
+        self.mock_cluster.dimx = 4
+        self.mock_cluster.dimy = 4
+        self.mock_cluster.dimz = 4
+        self.mock_cluster.bits_per_dim = 2
+        self.mock_cluster.linearAvail.return_value = np.array([])
+        # All nodes unavailable, expect rejection.
+        decision, _ = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        # [Admitted case 1] best fit with smallest range.
+        self.mock_cluster.linearAvail.return_value = np.array([1, 3, 4, 5, 6, 7, 8])
+        # Corresponding coordinates for nodes with Hilbert index [3, 4, 5, 6, 7, 8].
+        coords = [(1, 0, 0), (1, 0, 1), (1, 1, 1), (0, 1, 1), (0, 0, 1), (0, 0, 2)]
+        # There are two feasible allocations, expect admission.
+        decision, job_to_sched = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(job_to_sched.allocation), 6)
+        for val in job_to_sched.allocation.values():
+            self.assertEqual(val, 1)
+        # Make sure slurm_hilbert picks the best feasible allocation, namely [3-8].
+        for x, y, z in coords:
+            self.assertIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+
+        # [Admitted case 2] first fit with equally small range.
+        job_to_sched.allocation.clear()
+        self.mock_cluster.linearAvail.return_value = np.array([1, 2, 3, 4, 5, 6, 7])
+        # Corresponding coordinates for nodes with Hilbert index [1, 2, 3, 4, 5, 6].
+        coords = [
+            (0, 1, 0),
+            (1, 1, 0),
+            (1, 0, 0),
+            (1, 0, 1),
+            (1, 1, 1),
+            (0, 1, 1),
+        ]
+        # There are two feasible allocations, expect admission.
+        decision, job_to_sched = self.sched.place(job, policy="slurm_hilbert")
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(job_to_sched.allocation), 6)
+        for val in job_to_sched.allocation.values():
+            self.assertEqual(val, 1)
+        # Make sure slurm_hilbert picks the first feasible allocation, namely [1-6].
+        for x, y, z in coords:
+            self.assertIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
