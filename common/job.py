@@ -53,6 +53,14 @@ class Job:
     completion_time_sec: Optional[float] = None
     # A ratio of JCT / job duration. 1 means no slowdown.
     slowdown: Optional[float] = None
+    # Reason for last job rejection. Must be one of: "resource", "shape".
+    reject_reason: Optional[str] = field(default=None, compare=False)
+    # Time of last rejection.
+    last_reject_time: Optional[float] = field(default=None, compare=False)
+    # Time spent on waiting for the shape to be available.
+    wait_on_shape_sec: Optional[float] = field(default=0, compare=False)
+    # Time spent on waiting for the total resources to be available.
+    wait_on_resource_sec: Optional[float] = field(default=0, compare=False)
     # ----- end of stats -----
 
     def __post_init__(self):
@@ -71,6 +79,14 @@ class Job:
             f"queue={self.queueing_delay_sec}, "
             f"jct={self.completion_time_sec}, "
             f"slowdown=({self.completion_time_sec}/{self.duration_sec})={self.slowdown}"
+        )
+
+    def extra_stats(self):
+        return (
+            f"Job {self.uuid}, "
+            f"queue={self.queueing_delay_sec}, "
+            f"wait_on_shape={self.wait_on_shape_sec}, "
+            f"wait_on_resource={self.wait_on_resource_sec}"
         )
 
 
@@ -119,3 +135,35 @@ def FormShape(shape: Tuple[Union[float, int], ...], topo: TopoType) -> str:
     # Unlike SplitShape(), there is no need to worry about fractional XPUs,
     # because the given shape from a trace should already be aware of that.
     return shape_delim.join(map(str, shape))
+
+
+def logRejectReason(current_time: float, job: Job, reason: str):
+    """
+    Logs the reason for the job rejection, and track the waiting time.
+    """
+    # Update the time tracking. If it is the first rejection of the job, skip this
+    # and only record the rejection.
+    if job.reject_reason == "shape":
+        job.wait_on_shape_sec += current_time - job.last_reject_time
+    elif job.reject_reason == "resource":
+        job.wait_on_resource_sec += current_time - job.last_reject_time
+    job.reject_reason = reason
+    job.last_reject_time = current_time
+
+
+def updateQueueingTime(current_time: float, job: Job):
+    """
+    Updates the end-to-end queueing time and time breakdown for the job.
+    """
+    # Update the time tracking. If it is the first rejection of the job, skip this
+    # and only record the rejection.
+    # If the job has never been rejected, the queueing time is 0.
+    if job.reject_reason == "shape":
+        job.wait_on_shape_sec += current_time - job.last_reject_time
+    elif job.reject_reason == "resource":
+        job.wait_on_resource_sec += current_time - job.last_reject_time
+    job.sched_time_sec = current_time
+    job.queueing_delay_sec = job.sched_time_sec - job.arrival_time_sec
+    # Clean up the reject reason and last reject time since the job has started execution.
+    job.reject_reason = None
+    job.last_reject_time = None

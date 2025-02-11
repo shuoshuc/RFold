@@ -4,12 +4,14 @@ from unittest.mock import MagicMock
 
 from common.flags import *
 from common.job import TopoType, Job
+from Cluster.cluster import Cluster
 from ClusterManager.manager import ClusterManager
 from WorkloadGen.generator import WorkloadGenerator
 from WorkloadGen.trace import TraceReplay
+from common.utils import spec_parser
 
 
-class TestTraceReplayWithSimpy(unittest.TestCase):
+class TestPhillyTraceReplayWithSimpy(unittest.TestCase):
 
     def setUp(self):
         self.env = simpy.Environment()
@@ -67,6 +69,42 @@ class TestTraceReplayWithSimpy(unittest.TestCase):
                 sched_time_sec=None,
             )
         )
+
+
+class TestC1TraceReplayWithSimpy(unittest.TestCase):
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        cluster = Cluster(self.env, spec=spec_parser(C1_MODEL))
+        self.mgr = ClusterManager(self.env, cluster=cluster)
+        self.trace = TraceReplay(self.env, tracefile=C1_TRACE, cluster_mgr=self.mgr)
+
+    def test_run_all(self):
+        """
+        Test that C1 trace completes and the queueing delay breakdown is correct.
+        """
+        self.assertEqual(len(self.trace.jobs), 7)
+
+        self.env.process(self.mgr.schedule())
+        self.env.process(self.trace.run())
+        # Run simulation to completion.
+        self.env.run()
+        self.mgr.job_stats = dict(sorted(self.mgr.job_stats.items()))
+        # C1 trace contains 7 jobs, expect to find all of them completed.
+        self.assertEqual(len(self.mgr.job_stats), 7)
+        for job in self.mgr.job_stats.values():
+            self.assertIsNotNone(job.queueing_delay_sec)
+            self.assertIsNotNone(job.wait_on_shape_sec)
+            self.assertIsNotNone(job.wait_on_resource_sec)
+        # Job1 and job3 experience queueing, check their queueing delay breakdown.
+        job1 = self.mgr.job_stats[1]
+        self.assertEqual(job1.queueing_delay_sec, 6)
+        self.assertEqual(job1.wait_on_shape_sec, 0)
+        self.assertEqual(job1.wait_on_resource_sec, 6)
+        job3 = self.mgr.job_stats[3]
+        self.assertEqual(job3.queueing_delay_sec, 6)
+        self.assertEqual(job3.wait_on_shape_sec, 4)
+        self.assertEqual(job3.wait_on_resource_sec, 2)
 
 
 class TestWorkloadGenWithSimpy(unittest.TestCase):

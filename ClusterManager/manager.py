@@ -4,7 +4,7 @@ from Cluster.cluster import Cluster
 from queue import PriorityQueue, Empty
 from typing import Generator, Optional
 
-from common.job import Job
+from common.job import Job, updateQueueingTime, logRejectReason
 from common.flags import *
 from common.utils import Signal
 from ClusterManager.scheduling import SchedulingPolicy, SchedDecision
@@ -44,8 +44,8 @@ class ClusterManager:
         self.dq_guard_proc = env.process(self.deferredQueueGuard())
         # Guard process for the running job queue.
         self.rq_guard_proc = env.process(self.runningQueueGuard())
-        # A map from job UUID to job statistics.
-        self.job_stats = {}
+        # A map from job UUID to job, tracking statistics.
+        self.job_stats: dict[int, Job] = {}
 
     def submitJob(self, job: Job):
         """
@@ -215,6 +215,21 @@ class ClusterManager:
             if decision == SchedDecision.ADMIT:
                 # Admitted jobs are directly executed on the cluster.
                 self.executeOnCluster(job_to_sched)
+                # The admitted job is sent for execution, resource usage should be updated now.
+                # Scan the deferred queue to see if the reject reason has changed for
+                # any deferred job as a result of this admission.
+                # Look at the underlying linear queue in priority queue because it allows
+                # for in-place modification. Need to be extra careful not to modify any of
+                # the fields used for sorting. This approach is not thread-safe.
+                for deferred_job in self.deferred_job_queue.queue:
+                    # Rejected jobs with reason "shape" are the ones interesting.
+                    if deferred_job.reject_reason != "shape":
+                        continue
+                    # Reason has changed to "resource" because of the admitted job.
+                    if not self.scheduler.check_total_xpu(
+                        deferred_job
+                    ) or not self.scheduler.check_total_xpu(deferred_job):
+                        logRejectReason(self.env.now, deferred_job, "resource")
             elif decision == SchedDecision.REJECT:
                 # Rejected jobs go into a deferred queue. To avoid busy looping, jobs
                 # in the deferred queue are only checked once every `DEFERRED_SCHED_SEC`,
@@ -246,8 +261,7 @@ class ClusterManager:
         time and move it to the running queue for continuous tracking.
         """
         # Scheduled time = time when the job is executed.
-        job.sched_time_sec = self.env.now
-        job.queueing_delay_sec = job.sched_time_sec - job.arrival_time_sec
+        updateQueueingTime(self.env.now, job)
         # Once a job is scheduled, its priority changes from arrival time to desired
         # completion time.
         job.priority = self.env.now + job.duration_sec

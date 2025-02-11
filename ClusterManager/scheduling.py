@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from typing import Optional, Tuple
 
 from common.flags import *
-from common.job import Job, TopoType
+from common.job import Job, TopoType, logRejectReason
 from Cluster.cluster import Cluster
 from itertools import permutations
 
@@ -133,6 +133,7 @@ class SchedulingPolicy:
         loc_t = self._find_submesh(avail_array, b, a)
         if not loc and not loc_t:
             logging.debug(f"Job {job.uuid} rejected, no feasible placement found.")
+            logRejectReason(self.env.now, job, "shape")
             return SchedDecision.REJECT, job
         # If the placement is after transposition, update the job shape.
         base_x, base_y = loc if loc else loc_t
@@ -174,16 +175,17 @@ class SchedulingPolicy:
             return SchedDecision.ADMIT, job
 
         logging.debug(f"Job {job.uuid} rejected, no feasible placement found.")
+        logRejectReason(self.env.now, job, "shape")
         return SchedDecision.REJECT, job
 
-    def _check_total_xpu(self, job: Job) -> bool:
+    def check_total_xpu(self, job: Job) -> bool:
         """
         Check if the total number of XPUs required by the job is available.
         If not, return False. Otherwise, return True.
         """
         return job.size <= self.cluster.totalIdleXPU()
 
-    def _check_total_node(self, job: Job) -> bool:
+    def check_total_node(self, job: Job) -> bool:
         """
         Check if the total number of nodes required by the job is available.
         If not, return False. Otherwise, return True.
@@ -249,6 +251,7 @@ class SchedulingPolicy:
                     ] = 1
             return SchedDecision.ADMIT, job
 
+        logRejectReason(self.env.now, job, "shape")
         return SchedDecision.REJECT, job
 
     def place(self, job: Job, policy: str = SCHED_POLICY) -> Tuple[SchedDecision, Job]:
@@ -261,12 +264,14 @@ class SchedulingPolicy:
         if job.topology != self.cluster.topo:
             raise ValueError("Job topology mismatches cluster topology.")
         # Jobs that fail the total XPU check get rejected.
-        if not self._check_total_xpu(job):
+        if not self.check_total_xpu(job):
             logging.debug(f"Job {job.uuid} rejected, insufficient total number of XPUs.")
+            logRejectReason(self.env.now, job, "resource")
             return SchedDecision.REJECT, job
         # Jobs that fail the total node check get rejected.
-        if not self._check_total_node(job):
+        if not self.check_total_node(job):
             logging.debug(f"Job {job.uuid} rejected, insufficient number of idle nodes.")
+            logRejectReason(self.env.now, job, "resource")
             return SchedDecision.REJECT, job
 
         if policy == "firstfit":
