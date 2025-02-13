@@ -130,9 +130,11 @@ class WorkloadGenerator:
             new_job = copy.deepcopy(self.jobs[j])
             new_job.uuid = self.uuidgen.fetch()
             new_job.arrival_time_sec = self.abs_time_sec
-            # Some job distributions have new info about duration.
+            # Some job distributions have no info about duration.
             # To handle this, use duration from another trace.
-            if new_job.duration_sec == 0:
+            # Some traces (e.g., Philly) have zero-duration jobs, likely due to
+            # logging granularity. Zero-duration jobs should be ignored.
+            while not new_job.duration_sec:
                 new_job.duration_sec = random.choice(self.cached_duration)
             # Conditionally ignore twisted torus.
             if IGNORE_TWIST and new_job.topology == TopoType.T3D_T:
