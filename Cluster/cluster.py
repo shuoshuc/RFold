@@ -7,7 +7,6 @@ from numpy.typing import NDArray
 from typing import Optional, Union
 
 from common.job import Job, TopoType
-from common.flags import *
 from common.utils import viz3D
 from Cluster.topology import Port, Link, Node, Switch
 

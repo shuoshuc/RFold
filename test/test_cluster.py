@@ -4,7 +4,6 @@ import unittest
 import numpy as np
 from hilbert import decode as hdecode
 
-from common.flags import *
 from common.job import Job, TopoType
 from common.utils import spec_parser
 from Cluster.cluster import Cluster

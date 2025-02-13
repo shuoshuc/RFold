@@ -8,7 +8,7 @@ from io import StringIO
 from scipy.stats import rv_discrete
 from typing import Union
 
-from common.flags import *
+from common.flags import FLAGS
 from common.job import TopoType, Job, SplitShape
 from common.simpleUUID import SimpleUUID
 from common.utils import extract_duration
@@ -27,7 +27,7 @@ class WorkloadGenerator:
         arrival_time_file: Union[str, StringIO],
         job_size_file: Union[str, StringIO],
         cluster_mgr: ClusterManager,
-        dur_trace: str = ACME_TRACE,
+        dur_trace: str = FLAGS.dur_trace_file,
     ):
         self.env = env
         self.cluster_mgr = cluster_mgr
@@ -137,7 +137,7 @@ class WorkloadGenerator:
             while not new_job.duration_sec:
                 new_job.duration_sec = random.choice(self.cached_duration)
             # Conditionally ignore twisted torus.
-            if IGNORE_TWIST and new_job.topology == TopoType.T3D_T:
+            if FLAGS.ignore_twist and new_job.topology == TopoType.T3D_T:
                 new_job.topology = TopoType.T3D_NT
 
             yield self.env.timeout(new_job.arrival_time_sec - self.env.now)

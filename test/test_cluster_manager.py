@@ -3,7 +3,7 @@ import simpy
 import unittest
 from unittest.mock import patch, call, MagicMock
 
-from common.flags import *
+from common.flags import FLAGS
 from common.job import Job, TopoType
 from Cluster.cluster import Cluster
 from ClusterManager.manager import ClusterManager
@@ -25,6 +25,8 @@ class TestClusterManager(unittest.TestCase):
         self.env = simpy.Environment()
         self.mock_cluster = MagicMock(spec=Cluster)
         self.mgr = ClusterManager(self.env, cluster=self.mock_cluster)
+        # Override global flags.
+        FLAGS.args.defer_sched_sec = 600
 
     def wgen_helper(self, jobs: list[Job]):
         for job in jobs:
@@ -111,7 +113,7 @@ class TestClusterManager(unittest.TestCase):
         ):
             self.env.process(self.mgr.schedule())
             self.env.process(self.wgen_helper([job1]))
-            self.env.run(until=DEFERRED_SCHED_SEC + 1)
+            self.env.run(until=FLAGS.defer_sched_sec + 1)
             # The job is rejected for the first time at t = 0. It is deferred until
             # t = DEFERRED_SCHED_SEC, when it gets rejected again. And the job is
             # deferred util t = 2 * DEFERRED_SCHED_SEC. So by the time simulation ends,
@@ -147,7 +149,7 @@ class TestClusterManager(unittest.TestCase):
         ):
             self.env.process(self.mgr.schedule())
             self.env.process(self.wgen_helper([job1, job2, job3]))
-            self.env.run(until=DEFERRED_SCHED_SEC + 1)
+            self.env.run(until=FLAGS.defer_sched_sec + 1)
             self.assertTrue(self.mgr.new_job_queue.empty())
             # When job1 is released from deferral, job2 and job3 are also retried.
             # Must be in the exact order.
@@ -201,14 +203,14 @@ class TestClusterManager(unittest.TestCase):
             self.mgr.scheduler.place.assert_has_calls([call(jobs[i]) for i in range(2)])
             self.mgr.scheduler.place.assert_has_calls([call(jobs[0])])
             # Continue simulation until right before deferral is done. Job3 is processed.
-            self.env.run(until=DEFERRED_SCHED_SEC - 1)
+            self.env.run(until=FLAGS.defer_sched_sec - 1)
             self.assertTrue(self.mgr.new_job_queue.empty())
             # Job3 is admitted, job2 is still in the deferred queue.
             self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
             self.mock_cluster.execute.assert_has_calls([call(jobs[0]), call(jobs[2])])
             self.mgr.scheduler.place.assert_has_calls([call(jobs[i]) for i in range(cnt)])
             # Continue simulation until right after deferral is done. Job2 is retried.
-            self.env.run(until=DEFERRED_SCHED_SEC + 2)
+            self.env.run(until=FLAGS.defer_sched_sec + 2)
             self.assertTrue(self.mgr.new_job_queue.empty())
             # Job2 is taken out of the deferred queue, retried and admitted.
             self.assertEqual(self.mgr.deferred_job_queue.qsize(), 0)
@@ -328,7 +330,7 @@ class TestClusterManager(unittest.TestCase):
             # Job1 is the only job running at t = 1.
             self.assertTrue(self.mgr.new_job_queue.empty())
             self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
-            self.assertEqual(self.mgr.next_retry, 0 + DEFERRED_SCHED_SEC)
+            self.assertEqual(self.mgr.next_retry, 0 + FLAGS.defer_sched_sec)
             self.assertEqual(self.mgr.running_job_queue.qsize(), 0)
             self.assertEqual(self.mgr.next_completion, 0)
             self.mgr.scheduler.place.assert_has_calls([call(job1)])
@@ -337,7 +339,7 @@ class TestClusterManager(unittest.TestCase):
             # Job2 is running at t = 2.
             self.assertTrue(self.mgr.new_job_queue.empty())
             self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
-            self.assertEqual(self.mgr.next_retry, 0 + DEFERRED_SCHED_SEC)
+            self.assertEqual(self.mgr.next_retry, 0 + FLAGS.defer_sched_sec)
             self.assertEqual(self.mgr.running_job_queue.qsize(), 1)
             self.assertEqual(self.mgr.next_completion, 7)
             self.mgr.scheduler.place.assert_has_calls([call(job1), call(job2)])

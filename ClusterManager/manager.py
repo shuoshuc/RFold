@@ -5,7 +5,7 @@ from queue import PriorityQueue, Empty
 from typing import Generator, Optional
 
 from common.job import Job, updateQueueingTime, logRejectReason
-from common.flags import *
+from common.flags import FLAGS
 from common.utils import Signal
 from ClusterManager.scheduling import SchedulingPolicy, SchedDecision
 
@@ -70,7 +70,7 @@ class ClusterManager:
         # timeout if needed.
         self.deferred_job_queue.put(job)
         if empty_before:
-            self.next_retry = self.env.now + DEFERRED_SCHED_SEC
+            self.next_retry = self.env.now + FLAGS.defer_sched_sec
             self.event_deferral.trigger()
         logging.info(
             f"t = {self.env.now}, deferred: {job.short_print()}, next retry: t = {self.next_retry}"

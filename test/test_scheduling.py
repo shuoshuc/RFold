@@ -4,7 +4,6 @@ import unittest
 import numpy as np
 from unittest.mock import call, MagicMock
 
-from common.flags import *
 from common.job import Job, TopoType
 from Cluster.cluster import Cluster
 from ClusterManager.scheduling import SchedDecision, SchedulingPolicy

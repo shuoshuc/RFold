@@ -7,7 +7,7 @@ from hilbert import decode as hdecode
 from numpy.typing import NDArray
 from typing import Optional, Tuple
 
-from common.flags import *
+from common.flags import FLAGS
 from common.job import Job, TopoType, logRejectReason
 from Cluster.cluster import Cluster
 from itertools import permutations
@@ -254,7 +254,9 @@ class SchedulingPolicy:
         logRejectReason(self.env.now, job, "shape")
         return SchedDecision.REJECT, job
 
-    def place(self, job: Job, policy: str = SCHED_POLICY) -> Tuple[SchedDecision, Job]:
+    def place(
+        self, job: Job, policy: str = FLAGS.sched_policy
+    ) -> Tuple[SchedDecision, Job]:
         """
         Make a scheduling decision for a job. Note that the job (e.g., shape, duration)
         could be modifed to achieve a more desirable scheduling decision. But if the job

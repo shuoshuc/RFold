@@ -12,7 +12,7 @@ This script is the entry point of the simulation framework.
 import simpy
 import logging
 
-from common.flags import *
+from common.flags import FLAGS
 from common.job import TopoType
 from common.utils import PrettyForm, spec_parser
 from Cluster.cluster import Cluster
@@ -37,16 +37,16 @@ def main():
     env = simpy.Environment()
 
     # Either load model from a file or directly generate it.
-    # model = spec_parser(MODEL_FILE)
-    model = C3_MODEL
+    model = spec_parser(FLAGS.model_file)
+    # model = C3_MODEL
 
     # Initialize the cluster.
     cluster = Cluster(env, spec=model)
     # Initialize the cluster manager.
     mgr = ClusterManager(env, cluster=cluster)
     # Spin up the workload generator.
-    trace = TraceReplay(env, tracefile=TRACE_NAME, cluster_mgr=mgr)
-    if USE_TRACE:
+    trace = TraceReplay(env, tracefile=FLAGS.trace_file, cluster_mgr=mgr)
+    if FLAGS.use_trace:
         workload = trace
     else:
         csv_iat, csv_size = trace.exportDist()
@@ -57,7 +57,7 @@ def main():
     # Start simulation.
     logging.info("Simulation starts")
     env.process(mgr.schedule())
-    env.process(workload.run(stop_time=SIM_DURATION_SEC))
+    env.process(workload.run(stop_time=FLAGS.sim_sec))
     env.run()
     logging.info("Simulation completes")
     mgr.sweepAllQueues()
@@ -69,7 +69,8 @@ def main():
 
 
 if __name__ == "__main__":
-    lvl = getattr(logging, LOG_LEVEL.upper(), None)
+    # Set up logging.
+    lvl = getattr(logging, FLAGS.log_level.upper(), None)
     if not isinstance(lvl, int):
         raise ValueError(f"Invalid log level: {lvl}")
     # Configure the root logger.
@@ -82,4 +83,6 @@ if __name__ == "__main__":
     logger.setLevel(lvl)
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+    # Simulation logic.
     main()

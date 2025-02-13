@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, Union
 
-from common.flags import *
+from common.flags import FLAGS
 from common.job import TopoType
 from common.utils import dump_spec
 
@@ -399,7 +399,7 @@ def build(
     port_per_node: int,
     port_speed_gbps: float,
     output: str = None,
-    t1_reserved: int = T1_RESERVED_PORTS,
+    t1_reserved: int = FLAGS.t1_reserved_ports,
 ) -> dict:
     """
     The builder function to construct a cluster topology.

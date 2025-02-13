@@ -3,7 +3,7 @@ from enum import Enum
 from math import ceil
 from typing import Tuple, Optional, Union, TypedDict
 
-from common.flags import *
+from common.flags import FLAGS
 
 
 # Definition of type Allocation: it is a dict.
@@ -121,7 +121,10 @@ def SplitShape(shape: str, topo: TopoType) -> Tuple[Union[float, int], ...]:
     # Torus shape is separated by 'x', while Clos shape is separated by '+'.
     shape_delim = "+" if topo == TopoType.CLOS else "x"
     return tuple(
-        map(lambda x: float(x) if FRAC_XPU else ceil(float(x)), shape.split(shape_delim))
+        map(
+            lambda x: float(x) if FLAGS.frac_xpu else ceil(float(x)),
+            shape.split(shape_delim),
+        )
     )
 
 

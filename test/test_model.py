@@ -1,7 +1,6 @@
 import simpy
 import unittest
 
-from common.flags import *
 from common.job import TopoType
 from Cluster.cluster import Cluster
 from Cluster.model_builder import build, connect_links
