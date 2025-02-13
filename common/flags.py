@@ -21,9 +21,9 @@ class Flags:
         # Parse command line arguments.
         self.parser = argparse.ArgumentParser(description="Simulation entry point.")
         self.parser.add_argument(
-            "--use_trace",
-            type=bool,
-            default=True,
+            "-R",
+            "--replay",
+            action="store_true",
             help="True to replay a trace, False to generate new workload.",
         )
         self.parser.add_argument(
@@ -31,11 +31,7 @@ class Flags:
             "--sim_sec",
             type=int,
             default=360000,
-            help=(
-                "Simulation duration in seconds."
-                "NB: use this to limit the length of the trace, but let the scheduler "
-                "run until completion."
-            ),
+            help=("Simulation duration in seconds."),
         )
         self.parser.add_argument(
             "--defer_sched_sec",
@@ -84,9 +80,21 @@ class Flags:
             help=("The trace to use."),
         )
         self.parser.add_argument(
+            "--iat_file",
+            type=str,
+            default="",
+            help=("Inter-arrival time distribution file."),
+        )
+        self.parser.add_argument(
+            "--job_size_file",
+            type=str,
+            default=TPU_JOB_SIZES_DIST,
+            help=("Job size/shape distribution file."),
+        )
+        self.parser.add_argument(
             "--dur_trace_file",
             type=str,
-            default=ACME_TRACE,
+            default=PHILLY_TRACE,
             help=("Use job duration from the given trace."),
         )
         self.parser.add_argument(
@@ -103,11 +111,23 @@ class Flags:
                 "DEBUG, INFO, WARNING, ERROR, CRITICAL."
             ),
         )
+        self.parser.add_argument(
+            "--trace_output",
+            type=str,
+            default="",
+            help=("File path to write the trace to."),
+        )
+        self.parser.add_argument(
+            "--stats_output",
+            type=str,
+            default="",
+            help=("File path to write the stats to."),
+        )
         self.args = self.parser.parse_args()
 
     @property
-    def use_trace(self):
-        return self.args.use_trace
+    def replay(self):
+        return self.args.replay
 
     @property
     def sim_sec(self):
@@ -138,6 +158,14 @@ class Flags:
         return self.args.trace_file
 
     @property
+    def iat_file(self):
+        return self.args.iat_file
+
+    @property
+    def job_size_file(self):
+        return self.args.job_size_file
+
+    @property
     def dur_trace_file(self):
         return self.args.dur_trace_file
 
@@ -148,6 +176,14 @@ class Flags:
     @property
     def log_level(self):
         return self.args.log_level
+
+    @property
+    def trace_output(self):
+        return self.args.trace_output
+
+    @property
+    def stats_output(self):
+        return self.args.stats_output
 
 
 # Instantiate a global flags object.

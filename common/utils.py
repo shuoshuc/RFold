@@ -157,3 +157,47 @@ def job_stats_to_trace(stats: dict, trace_output: str):
             ]
         )
         writer.writerows(trace)
+
+
+def dump_stats(stats: dict, stats_output: str):
+    """
+    Convert job stats exported from ClusterManager to a csv file.
+    """
+    if not stats or not stats_output:
+        raise ValueError("Invalid input to output to trace.")
+
+    out = []
+    for job in stats.values():
+        if job.queueing_delay_sec is None:
+            continue
+        out.append(
+            [
+                job.uuid,
+                job.arrival_time_sec,
+                job.sched_time_sec,
+                job.completion_time_sec,
+                job.size,
+                job.queueing_delay_sec,
+                job.completion_time_sec,
+                job.wait_on_resource_sec,
+                job.wait_on_shape_sec,
+                job.slowdown,
+            ]
+        )
+    with open(stats_output, mode="w") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "#job id",
+                "arrival time (sec)",
+                "sched time (sec)",
+                "complete time (sec)",
+                "size",
+                "queueing (sec)",
+                "jct (sec)",
+                "wait on resource (sec)",
+                "wait on shape (sec)",
+                "slowdown",
+            ]
+        )
+        writer.writerows(out)

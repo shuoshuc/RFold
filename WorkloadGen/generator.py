@@ -27,7 +27,7 @@ class WorkloadGenerator:
         arrival_time_file: Union[str, StringIO],
         job_size_file: Union[str, StringIO],
         cluster_mgr: ClusterManager,
-        dur_trace: str = FLAGS.dur_trace_file,
+        dur_trace: str,
     ):
         self.env = env
         self.cluster_mgr = cluster_mgr

@@ -56,6 +56,7 @@ class TestWorkloadGen(unittest.TestCase):
             arrival_time_file=TPU_ARRIVAL_TIME_DIST,
             job_size_file=TPU_JOB_SIZES_DIST,
             cluster_mgr=None,
+            dur_trace=FLAGS.dur_trace_file,
         )
 
     def test_loading(self):
@@ -82,7 +83,11 @@ class TestWorkloadGenExported(unittest.TestCase):
         self.trace = TraceReplay(None, tracefile=PHILLY_TRACE, cluster_mgr=None)
         iat, size = self.trace.exportDist()
         self.wgen = WorkloadGenerator(
-            None, arrival_time_file=iat, job_size_file=size, cluster_mgr=None
+            None,
+            arrival_time_file=iat,
+            job_size_file=size,
+            cluster_mgr=None,
+            dur_trace=FLAGS.dur_trace_file,
         )
 
     def test_loading(self):

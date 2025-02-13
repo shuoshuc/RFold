@@ -117,6 +117,7 @@ class TestWorkloadGenWithSimpy(unittest.TestCase):
             arrival_time_file=TPU_ARRIVAL_TIME_DIST,
             job_size_file=TPU_JOB_SIZES_DIST,
             cluster_mgr=self.mock_mgr,
+            dur_trace=FLAGS.dur_trace_file,
         )
 
     def test_run_one(self):
