@@ -137,7 +137,7 @@ class WorkloadGenerator:
             while not new_job.duration_sec:
                 new_job.duration_sec = random.choice(self.cached_duration)
             # Conditionally ignore twisted torus.
-            if FLAGS.ignore_twist and new_job.topology == TopoType.T3D_T:
+            if not FLAGS.no_ignore_twist and new_job.topology == TopoType.T3D_T:
                 new_job.topology = TopoType.T3D_NT
 
             yield self.env.timeout(new_job.arrival_time_sec - self.env.now)

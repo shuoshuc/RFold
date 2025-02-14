@@ -53,9 +53,8 @@ class Flags:
             ),
         )
         self.parser.add_argument(
-            "--ignore_twist",
-            type=bool,
-            default=True,
+            "--no_ignore_twist",
+            action="store_true",
             help=("Whether to ignore twisted torus and treat them as normal torus."),
         )
         self.parser.add_argument(
@@ -143,8 +142,8 @@ class Flags:
         return self.args.sched_policy
 
     @property
-    def ignore_twist(self):
-        return self.args.ignore_twist
+    def no_ignore_twist(self):
+        return self.args.no_ignore_twist
 
     @property
     def t1_reserved_ports(self):
