@@ -5,6 +5,7 @@ import argparse
 # C2: 2-tier Clos
 TPU_JOB_SIZES_DIST = "WorkloadGen/data/tpu_job_size.csv"
 TPU_ARRIVAL_TIME_DIST = "WorkloadGen/data/tpu_arrival_time.csv"
+IAT_DIST = "WorkloadGen/data/iat.csv"
 PHILLY_TRACE = "WorkloadGen/data/philly_trace.csv"
 ALIBABA_TRACE = "WorkloadGen/data/alibaba_v2020.csv"
 HELIOS_TRACE = "WorkloadGen/data/helios.csv"
@@ -82,7 +83,7 @@ class Flags:
         self.parser.add_argument(
             "--iat_file",
             type=str,
-            default="",
+            default=IAT_DIST,
             help=("Inter-arrival time distribution file."),
         )
         self.parser.add_argument(
