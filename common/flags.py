@@ -22,12 +22,6 @@ class Flags:
         # Parse command line arguments.
         self.parser = argparse.ArgumentParser(description="Simulation entry point.")
         self.parser.add_argument(
-            "-R",
-            "--replay",
-            action="store_true",
-            help="True to replay a trace, False to generate new workload.",
-        )
-        self.parser.add_argument(
             "-t",
             "--sim_sec",
             type=int,
@@ -37,7 +31,7 @@ class Flags:
         self.parser.add_argument(
             "--defer_sched_sec",
             type=int,
-            default=360000,
+            default=int(1e9),
             help=(
                 "Time duration (seconds) a job is deferred for scheduling."
                 "This typically happens when the initial scheduling decision of "
@@ -68,16 +62,27 @@ class Flags:
             ),
         )
         self.parser.add_argument(
+            "--dim",
+            type=lambda s: tuple(int(item) for item in s.split(",")),
+            default=(16, 16, 16),
+            help=(
+                "Comma separated tuple of dimensions. "
+                "E.g., 16,16 for a 2D torus with 16 nodes in each dimension, "
+                "16,16,16 for a 3D torus with 16 nodes in each dimension."
+            ),
+        )
+        self.parser.add_argument(
             "--model_file",
             type=str,
-            default=C1_MODEL,
+            default="",
             help=("Path to the cluster spec file."),
         )
         self.parser.add_argument(
-            "--trace_file",
+            "-r",
+            "--replay_trace",
             type=str,
-            default=C1_TRACE,
-            help=("The trace to use."),
+            default="",
+            help=("The trace file to replay."),
         )
         self.parser.add_argument(
             "--iat_file",
@@ -126,10 +131,6 @@ class Flags:
         self.args = self.parser.parse_args()
 
     @property
-    def replay(self):
-        return self.args.replay
-
-    @property
     def sim_sec(self):
         return self.args.sim_sec
 
@@ -150,12 +151,16 @@ class Flags:
         return self.args.t1_reserved_ports
 
     @property
+    def dim(self):
+        return self.args.dim
+
+    @property
     def model_file(self):
         return self.args.model_file
 
     @property
-    def trace_file(self):
-        return self.args.trace_file
+    def replay_trace(self):
+        return self.args.replay_trace
 
     @property
     def iat_file(self):

@@ -16,37 +16,32 @@ from common.flags import FLAGS
 from common.job import TopoType
 from common.utils import PrettyForm, spec_parser, job_stats_to_trace, dump_stats
 from Cluster.cluster import Cluster
-from Cluster.model_builder import build
+from Cluster.model_builder import build, build_torus
 from ClusterManager.manager import ClusterManager
 from WorkloadGen.generator import WorkloadGenerator
 from WorkloadGen.trace import TraceReplay
-
-# C3 model is pretty large, so avoid loading from a model file.
-# Just directly generate it when needed.
-C3_MODEL = build(
-    topo=TopoType.T3D_NT,
-    name="c3",
-    dimension=(16, 16, 16),
-    xpu_per_node=1,
-    port_per_node=6,
-    port_speed_gbps=800,
-)
 
 
 def main():
     env = simpy.Environment()
 
-    # Either load model from a file or directly generate it.
-    model = spec_parser(FLAGS.model_file)
-    # model = C3_MODEL
+    # Load model from a file if specified or fall back to directly generating one.
+    if FLAGS.model_file:
+        model = spec_parser(FLAGS.model_file)
+    else:
+        model = build_torus(
+            name="c3",
+            dimension=FLAGS.dim,
+        )
 
     # Initialize the cluster.
     cluster = Cluster(env, spec=model)
     # Initialize the cluster manager.
     mgr = ClusterManager(env, cluster=cluster)
-    # Spin up the workload generator.
-    if FLAGS.replay:
-        workload = TraceReplay(env, tracefile=FLAGS.trace_file, cluster_mgr=mgr)
+    # Spin up the workload generator. If a trace is provided, replay the trace.
+    # Otherwise, generate a new workload.
+    if FLAGS.replay_trace:
+        workload = TraceReplay(env, tracefile=FLAGS.replay_trace, cluster_mgr=mgr)
     else:
         workload = WorkloadGenerator(
             env,
@@ -73,7 +68,7 @@ def main():
     for job in mgr.job_stats.values():
         logging.info(f"{job.stats()}")
     # Dump the trace generated in runtime to a file.
-    if not FLAGS.replay and FLAGS.trace_output:
+    if not FLAGS.replay_trace and FLAGS.trace_output:
         job_stats_to_trace(mgr.job_stats, FLAGS.trace_output)
     # Dump the stats to a file.
     if FLAGS.stats_output:

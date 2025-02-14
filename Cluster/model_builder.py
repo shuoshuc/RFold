@@ -483,3 +483,31 @@ def build(
         return cluster
     else:
         raise ValueError(f"Unknown topology: {topo}")
+
+
+def build_torus(
+    name: str,
+    dimension: Union[tuple[int, int], tuple[int, int, int]],
+    port_speed_gbps: float = 800,
+    output: str = None,
+) -> dict:
+    """
+    Short cut to build a torus topology.
+    """
+    topo = None
+    if len(dimension) == 2:
+        topo = TopoType.T2D
+    elif len(dimension) == 3:
+        topo = TopoType.T3D_NT
+    else:
+        raise NotImplementedError("Only 2D and 3D torus are supported.")
+
+    return build(
+        topo=topo,
+        name=name,
+        dimension=dimension,
+        xpu_per_node=1,
+        port_per_node=2 * len(dimension),
+        port_speed_gbps=port_speed_gbps,
+        output=output,
+    )
