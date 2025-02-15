@@ -12,6 +12,9 @@ from common.flags import *
 # Short-hand mapping to the files.
 STRMAP = {
     "philly": PHILLY_TRACE,
+    "ali20": ALIBABA_TRACE,
+    "acme": ACME_TRACE,
+    "helios": HELIOS_TRACE,
     "iat": IAT_DIST,
 }
 
@@ -41,9 +44,9 @@ def run_process(i, tot, args):
 
 def main():
     # All the parameters to sweep over.
-    sim_duration = [1800, 3600]
-    dimensions = ["16,16,16", "32,32,32"]
-    duration_trace = ["philly"]
+    sim_duration = [50 * 3600, 100 * 3600]
+    dimensions = ["16,16,16", "24,24,24", "32,32,32"]
+    duration_trace = ["philly", "ali20", "helios", "acme"]
     iat_distribution = ["iat"]
     sched_policy = ["firstfit", "slurm_hilbert"]
 
