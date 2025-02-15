@@ -46,6 +46,9 @@ class ClusterManager:
         self.rq_guard_proc = env.process(self.runningQueueGuard())
         # A map from job UUID to job, tracking statistics.
         self.job_stats: dict[int, Job] = {}
+        # A list of cluster statistics, each tuple is
+        # (time, utilization, # jobs running, # jobs queued).
+        self.cluster_stats: list[tuple[int, float, int, int]] = []
 
     def submitJob(self, job: Job):
         """
@@ -276,6 +279,7 @@ class ClusterManager:
             # If the existing completion time is in the past, or the new job completes
             # after the existing completion time, it is a normal enqueue, no interrupt.
             self.event_running.trigger()
+        self.logClusterStats()
 
     def completeOnCluster(self, job: Job):
         """
@@ -290,6 +294,7 @@ class ClusterManager:
         # Notify the deferred queue guard to retry deferred jobs now that some resources
         # have been freed up.
         self.dq_guard_proc.interrupt()
+        self.logClusterStats()
 
     def sweepAllQueues(self):
         """
@@ -307,3 +312,17 @@ class ClusterManager:
                     self.job_stats[job.uuid] = job
             except Empty:
                 continue
+
+    def logClusterStats(self):
+        """
+        Log one sample of cluster statistics.
+        """
+        self.cluster_stats.append(
+            (
+                self.env.now,
+                (self.cluster.numNodes() - self.cluster.totalIdleNodes())
+                / self.cluster.numNodes(),
+                self.deferred_job_queue.qsize(),
+                self.running_job_queue.qsize(),
+            )
+        )

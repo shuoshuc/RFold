@@ -117,16 +117,10 @@ class Flags:
             ),
         )
         self.parser.add_argument(
-            "--trace_output",
+            "--stats_outdir",
             type=str,
             default="",
-            help=("File path to write the trace to."),
-        )
-        self.parser.add_argument(
-            "--stats_output",
-            type=str,
-            default="",
-            help=("File path to write the stats to."),
+            help=("Directory to write all stats to."),
         )
         self.args = self.parser.parse_args()
 
@@ -183,12 +177,8 @@ class Flags:
         return self.args.log_level
 
     @property
-    def trace_output(self):
-        return self.args.trace_output
-
-    @property
-    def stats_output(self):
-        return self.args.stats_output
+    def stats_outdir(self):
+        return self.args.stats_outdir
 
 
 # Instantiate a global flags object.

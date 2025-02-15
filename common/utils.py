@@ -159,7 +159,7 @@ def job_stats_to_trace(stats: dict, trace_output: str):
         writer.writerows(trace)
 
 
-def dump_stats(stats: dict, stats_output: str):
+def dump_job_stats(stats: dict, stats_output: str):
     """
     Convert job stats exported from ClusterManager to a csv file.
     """
@@ -200,4 +200,20 @@ def dump_stats(stats: dict, stats_output: str):
                 "slowdown",
             ]
         )
+        writer.writerows(out)
+
+
+def dump_cluster_stats(stats: list[tuple], stats_output: str):
+    """
+    Convert cluster stats exported from ClusterManager to a csv file.
+    """
+    if not stats or not stats_output:
+        raise ValueError("Invalid input to output to trace.")
+
+    out = []
+    for t, util, running, queued in stats:
+        out.append([t, util, running, queued])
+    with open(stats_output, mode="w") as file:
+        writer = csv.writer(file)
+        writer.writerow(["#time (sec)", "util", "jobs queued", "jobs running"])
         writer.writerows(out)

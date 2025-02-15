@@ -25,8 +25,8 @@ def run_process(i, args):
         os.makedirs(run_dir)
     cmd = (
         f"python3 launch.py -t {sim_dur} --dim {dim} --dur_trace_file {STRMAP[dur_file]} "
-        f"--iat_file={STRMAP[iat_file]} --stats_output {run_dir}/stats.csv "
-        f"--trace_output {run_dir}/trace.csv --log_level WARNING"
+        f"--iat_file={STRMAP[iat_file]} --stats_outdir {run_dir} "
+        f"--log_level WARNING"
     )
     result = subprocess.run(cmd, shell=True)
     end = time.time()

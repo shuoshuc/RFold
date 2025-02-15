@@ -105,6 +105,19 @@ class TestC1TraceReplayWithSimpy(unittest.TestCase):
         self.assertEqual(job3.queueing_delay_sec, 6)
         self.assertEqual(job3.wait_on_shape_sec, 4)
         self.assertEqual(job3.wait_on_resource_sec, 2)
+        # Expect 14 records in cluster stats, 2 per job.
+        self.assertEqual(len(self.mgr.cluster_stats), 14)
+        for record in self.mgr.cluster_stats:
+            # Each record should have 4 fields: time, util, # jobs queued, # jobs running.
+            self.assertEqual(len(record), 4)
+            t, util, queued, running = record
+            self.assertGreaterEqual(t, 0)
+            self.assertGreaterEqual(util, 0)
+            self.assertLessEqual(util, 1)
+            self.assertGreaterEqual(queued, 0)
+            self.assertLessEqual(queued, self.mgr.cluster.numNodes())
+            self.assertGreaterEqual(running, 0)
+            self.assertLessEqual(running, self.mgr.cluster.numNodes())
 
 
 class TestWorkloadGenWithSimpy(unittest.TestCase):

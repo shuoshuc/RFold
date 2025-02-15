@@ -9,12 +9,19 @@ This script is the entry point of the simulation framework.
 """
 
 
+import os
 import simpy
 import logging
 
 from common.flags import FLAGS
 from common.job import TopoType
-from common.utils import PrettyForm, spec_parser, job_stats_to_trace, dump_stats
+from common.utils import (
+    PrettyForm,
+    spec_parser,
+    job_stats_to_trace,
+    dump_job_stats,
+    dump_cluster_stats,
+)
 from Cluster.cluster import Cluster
 from Cluster.model_builder import build, build_torus
 from ClusterManager.manager import ClusterManager
@@ -67,12 +74,17 @@ def main():
     mgr.job_stats = dict(sorted(mgr.job_stats.items()))
     for job in mgr.job_stats.values():
         logging.info(f"{job.stats()}")
-    # Dump the trace generated in runtime to a file.
-    if not FLAGS.replay_trace and FLAGS.trace_output:
-        job_stats_to_trace(mgr.job_stats, FLAGS.trace_output)
     # Dump the stats to a file.
-    if FLAGS.stats_output:
-        dump_stats(mgr.job_stats, FLAGS.stats_output)
+    if FLAGS.stats_outdir:
+        dump_job_stats(mgr.job_stats, os.path.join(FLAGS.stats_outdir, "job_stats.csv"))
+        dump_cluster_stats(
+            mgr.cluster_stats, os.path.join(FLAGS.stats_outdir, "cluster_stats.csv")
+        )
+        # Dump the trace (if generated in runtime) to a file.
+        if not FLAGS.replay_trace:
+            job_stats_to_trace(
+                mgr.job_stats, os.path.join(FLAGS.stats_outdir, "trace.csv")
+            )
 
 
 if __name__ == "__main__":
