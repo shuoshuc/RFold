@@ -19,6 +19,8 @@ STRMAP = {
 def run_process(i, args):
     sim_dur, dim, dur_file, iat_file = args
     run_dir = f"run{i}"
+
+    start = time.time()
     if not os.path.exists(run_dir):
         os.makedirs(run_dir)
     cmd = (
@@ -27,10 +29,14 @@ def run_process(i, args):
         f"--trace_output {run_dir}/trace.csv --log_level WARNING"
     )
     result = subprocess.run(cmd, shell=True)
+    end = time.time()
 
     if result.returncode != 0:
         print(f"[ERROR] run{i} failed with return code {result.returncode}")
-    print(f"run{i}: sim_dur={sim_dur}, dim={dim}, dur_file={dur_file}, iat={iat_file}")
+    print(
+        f"run{i} took {round((end - start) / 60, 0)} min: sim_dur={sim_dur}, dim={dim}, "
+        f"dur_file={dur_file}, iat={iat_file}"
+    )
 
 
 def main():
@@ -55,7 +61,7 @@ def main():
     for p in processes:
         p.join()
     end_time = time.time()
-    print(f"Total execution time: {round(end_time - start_time, 0)} seconds")
+    print(f"Total execution time: {round((end_time - start_time) / 60, 0)} min")
 
 
 if __name__ == "__main__":
