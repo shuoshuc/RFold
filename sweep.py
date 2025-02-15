@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import multiprocessing
+import multiprocessing as mp
 import os
 import subprocess
+import time
 from itertools import product
 
 from common.flags import *
-import time
 
 # Short-hand mapping to the files.
 STRMAP = {
@@ -40,7 +40,6 @@ def run_process(i, tot, args):
 
 
 def main():
-    processes = []
     # All the parameters to sweep over.
     sim_duration = [1800, 3600]
     dimensions = ["16,16,16", "32,32,32"]
@@ -52,16 +51,11 @@ def main():
     configs = list(
         product(sim_duration, dimensions, duration_trace, iat_distribution, sched_policy)
     )
-    for i, args in enumerate(configs):
-        p = multiprocessing.Process(
-            target=run_process,
-            args=(i + 1, len(configs), args),
+    # Reserve 2 cores for the system to remain responsive.
+    with mp.Pool(processes=mp.cpu_count() - 2) as pool:
+        pool.starmap(
+            run_process, [(i + 1, len(configs), args) for i, args in enumerate(configs)]
         )
-        p.start()
-        processes.append(p)
-
-    for p in processes:
-        p.join()
     end_time = time.time()
     print(f"Total execution time: {round((end_time - start_time) / 60, 0)} min")
 
