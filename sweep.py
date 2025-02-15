@@ -16,7 +16,7 @@ STRMAP = {
 }
 
 
-def run_process(i, args):
+def run_process(i, tot, args):
     sim_dur, dim, dur_file, iat_file = args
     run_dir = f"run{i}"
 
@@ -34,7 +34,7 @@ def run_process(i, args):
     if result.returncode != 0:
         print(f"[ERROR] run{i} failed with return code {result.returncode}")
     print(
-        f"run{i} took {round((end - start) / 60, 0)} min: sim_dur={sim_dur}, dim={dim}, "
+        f"run {i}/{tot} took {round((end - start) / 60, 0)} min: sim_dur={sim_dur}, dim={dim}, "
         f"dur_file={dur_file}, iat={iat_file}"
     )
 
@@ -48,12 +48,11 @@ def main():
     iat_distribution = ["iat"]
 
     start_time = time.time()
-    for i, args in enumerate(
-        list(product(sim_duration, dimensions, duration_trace, iat_distribution))
-    ):
+    configs = list(product(sim_duration, dimensions, duration_trace, iat_distribution))
+    for i, args in enumerate(configs):
         p = multiprocessing.Process(
             target=run_process,
-            args=(i, args),
+            args=(i + 1, len(configs), args),
         )
         p.start()
         processes.append(p)
