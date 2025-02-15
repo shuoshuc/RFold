@@ -203,7 +203,8 @@ class Cluster:
         array = []
         for node in self.nodes.values():
             index, avail = node.getHilbertIndex(), node.numIdleXPU()
-            if not index:
+            # Note that valid Hilbert index can be 0.
+            if index is None:
                 raise ValueError(
                     "Hilbert index not set for node or topology not supported."
                 )

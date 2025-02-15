@@ -17,7 +17,7 @@ STRMAP = {
 
 
 def run_process(i, tot, args):
-    sim_dur, dim, dur_file, iat_file = args
+    sim_dur, dim, dur_file, iat_file, policy = args
     run_dir = f"run{i}"
 
     start = time.time()
@@ -25,7 +25,7 @@ def run_process(i, tot, args):
         os.makedirs(run_dir)
     cmd = (
         f"python3 launch.py -t {sim_dur} --dim {dim} --dur_trace_file {STRMAP[dur_file]} "
-        f"--iat_file={STRMAP[iat_file]} --stats_outdir {run_dir} "
+        f"--iat_file={STRMAP[iat_file]} --sched_policy {policy} --stats_outdir {run_dir} "
         f"--log_level WARNING"
     )
     result = subprocess.run(cmd, shell=True)
@@ -35,7 +35,7 @@ def run_process(i, tot, args):
         print(f"[ERROR] run{i} failed with return code {result.returncode}")
     print(
         f"run {i}/{tot} took {round((end - start) / 60, 0)} min: sim_dur={sim_dur}, dim={dim}, "
-        f"dur_file={dur_file}, iat={iat_file}"
+        f"dur_file={dur_file}, iat={iat_file}, sched_policy={policy}"
     )
 
 
@@ -46,9 +46,12 @@ def main():
     dimensions = ["16,16,16", "32,32,32"]
     duration_trace = ["philly"]
     iat_distribution = ["iat"]
+    sched_policy = ["firstfit", "slurm_hilbert"]
 
     start_time = time.time()
-    configs = list(product(sim_duration, dimensions, duration_trace, iat_distribution))
+    configs = list(
+        product(sim_duration, dimensions, duration_trace, iat_distribution, sched_policy)
+    )
     for i, args in enumerate(configs):
         p = multiprocessing.Process(
             target=run_process,
