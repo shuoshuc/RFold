@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
-import sys
 import os
+import sys
 
 
 def run_config(run_id: int) -> str:
@@ -70,6 +70,32 @@ def plot_job(job_stats: dict):
     plt.show()
 
 
+def plot_cluster(cluster_stats: dict):
+    # Disable all pandas warnings.
+    pd.options.mode.chained_assignment = None
+    fig, axs = plt.subplots(
+        len(cluster_stats), 2, figsize=(12, 2 * len(cluster_stats)), layout="constrained"
+    )
+    for i, (run, df) in enumerate(cluster_stats.items()):
+        ax = axs[i][0]
+        ax.plot(df["#time (sec)"] / 3600, df["util"] * 100)
+        ax.set_xlabel("time (hr)")
+        ax.set_ylabel("utilization (%)")
+        ax.set_title(run_config(run))
+        ax.grid()
+
+        ax = axs[i][1]
+        ax.plot(df["#time (sec)"] / 3600, df["jobs queued"], label="queued")
+        ax.plot(df["#time (sec)"] / 3600, df["jobs running"], label="running")
+        ax.set_xlabel("time (hr)")
+        ax.set_ylabel("# jobs")
+        ax.set_title(run_config(run))
+        ax.grid()
+        ax.legend(loc="upper left")
+
+    plt.show()
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python plot.py <stats_outdir>")
@@ -79,3 +105,4 @@ if __name__ == "__main__":
     run_id = [0, 16, 17, 19, 28]
     job_stats, cluster_stats = load(stats_outdir, run_id)
     plot_job(job_stats)
+    plot_cluster(cluster_stats)
