@@ -39,11 +39,11 @@ class Flags:
             ),
         )
         self.parser.add_argument(
-            "--sched_policy",
+            "--place_policy",
             type=str,
             default="firstfit",
             help=(
-                "Scheduling policy to use. Available options: firstfit, slurm_hilbert."
+                "Job placement policy to use. Available options: firstfit, slurm_hilbert."
             ),
         )
         self.parser.add_argument(
@@ -133,8 +133,8 @@ class Flags:
         return self.args.defer_sched_sec
 
     @property
-    def sched_policy(self):
-        return self.args.sched_policy
+    def place_policy(self):
+        return self.args.place_policy
 
     @property
     def no_ignore_twist(self):

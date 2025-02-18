@@ -255,7 +255,7 @@ class SchedulingPolicy:
         return SchedDecision.REJECT, job
 
     def place(
-        self, job: Job, policy: str = FLAGS.sched_policy
+        self, job: Job, policy: str = FLAGS.place_policy
     ) -> Tuple[SchedDecision, Job]:
         """
         Make a scheduling decision for a job. Note that the job (e.g., shape, duration)

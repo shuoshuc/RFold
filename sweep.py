@@ -51,15 +51,15 @@ def main(trace_folder: str):
     else:
         trace = [PHILLY_TRACE, ALIBABA_TRACE, HELIOS_TRACE, ACME_TRACE]
     iat = [IAT_DIST]
-    sched_policy = ["firstfit", "slurm_hilbert"]
+    place_policy = ["firstfit", "slurm_hilbert"]
 
     start_time = time.time()
-    configs = list(product(sim_duration, dimensions, trace, iat, sched_policy))
+    configs = list(product(sim_duration, dimensions, trace, iat, place_policy))
     cmds = []
     for args in configs:
         sim_dur, dim, trace_file, iat_file, policy = args
         cmd = (
-            f"python3 launch.py -t {sim_dur} --dim {dim} --sched_policy {policy} "
+            f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
             f"--log_level WARNING "
         )
         if trace_folder:
