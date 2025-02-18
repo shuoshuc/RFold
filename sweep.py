@@ -41,9 +41,12 @@ def main(trace_folder: str):
     sim_duration = [50 * 3600, 100 * 3600]
     dimensions = ["16,16,16", "24,24,24", "32,32,32"]
     if trace_folder:
+        # Include all csv files in the trace folder.
         trace = [
-            os.path.join(trace_folder, f"{trace}.csv")
-            for trace in ["philly", "alibaba20", "helios", "acme"]
+            os.path.join(root, file)
+            for root, _, files in os.walk(trace_folder)
+            for file in files
+            if file.endswith(".csv")
         ]
     else:
         trace = [PHILLY_TRACE, ALIBABA_TRACE, HELIOS_TRACE, ACME_TRACE]
