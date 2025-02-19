@@ -79,8 +79,10 @@ class TestClusterManagerWithFcfs(unittest.TestCase):
         """
         job1 = copy.deepcopy(JOB1)
         job2 = copy.deepcopy(JOB1)
+        job2.uuid = 2
         job2.arrival_time_sec = 2
         job3 = copy.deepcopy(JOB1)
+        job3.uuid = 3
         job3.arrival_time_sec = 3
 
         with patch(
@@ -125,8 +127,10 @@ class TestClusterManagerWithFcfs(unittest.TestCase):
         """
         job1 = copy.deepcopy(JOB1)
         job2 = copy.deepcopy(JOB1)
+        job2.uuid = 2
         job2.arrival_time_sec = 2
         job3 = copy.deepcopy(JOB1)
+        job3.uuid = 3
         job3.arrival_time_sec = 3
         with patch(
             "ClusterManager.scheduling.SchedulingPolicy.place",
@@ -234,9 +238,11 @@ class TestClusterManagerWithFcfs(unittest.TestCase):
         job1.arrival_time_sec = 5
         job1.duration_sec = 1
         job2 = copy.deepcopy(JOB1)
+        job2.uuid = 2
         job2.arrival_time_sec = 7
         job2.duration_sec = 5
         job3 = copy.deepcopy(JOB1)
+        job3.uuid = 3
         job3.arrival_time_sec = 9
         job3.duration_sec = 2
         with patch(
@@ -288,6 +294,7 @@ class TestClusterManagerWithFcfs(unittest.TestCase):
         job1.duration_sec = 10
         # Job2 is admitted at t = 2 and completes at t = 3.
         job2 = copy.deepcopy(JOB1)
+        job2.uuid = 2
         job2.arrival_time_sec = 2
         job2.duration_sec = 1
         with patch(
