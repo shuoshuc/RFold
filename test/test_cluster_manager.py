@@ -19,7 +19,7 @@ JOB1 = Job(
 )
 
 
-class TestClusterManager(unittest.TestCase):
+class TestClusterManagerWithFcfs(unittest.TestCase):
 
     def setUp(self):
         self.env = simpy.Environment()
@@ -49,7 +49,7 @@ class TestClusterManager(unittest.TestCase):
             # The job being scheduled never arrives before simulation terminates.
             self.mgr.scheduler.place.assert_not_called()
             # Simulation ends at t = 1, new job queue should be empty.
-            self.assertTrue(self.mgr.new_job_queue.empty())
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
             # No job is executed.
             self.assertEqual(self.mock_cluster.execute.call_count, 0)
 
@@ -70,7 +70,7 @@ class TestClusterManager(unittest.TestCase):
             self.mgr.scheduler.place.assert_called_once_with(job1)
             # Simulation ends at t = 3, new job queue should be empty since the only
             # job is admitted.
-            self.assertTrue(self.mgr.new_job_queue.empty())
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
             self.mock_cluster.execute.assert_called_once_with(job1)
 
     def test_multi_job_admit(self):
@@ -97,7 +97,7 @@ class TestClusterManager(unittest.TestCase):
             # Three jobs are submitted.
             self.assertEqual(self.mgr.scheduler.place.call_count, 3)
             # New job queue should be empty since all jobs are admitted.
-            self.assertTrue(self.mgr.new_job_queue.empty())
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
             self.mock_cluster.execute.assert_has_calls(
                 [call(job1), call(job2), call(job3)]
             )
@@ -113,18 +113,10 @@ class TestClusterManager(unittest.TestCase):
         ):
             self.env.process(self.mgr.schedule())
             self.env.process(self.wgen_helper([job1]))
-            self.env.run(until=FLAGS.defer_sched_sec + 1)
-            # The job is rejected for the first time at t = 0. It is deferred until
-            # t = DEFERRED_SCHED_SEC, when it gets rejected again. And the job is
-            # deferred util t = 2 * DEFERRED_SCHED_SEC. So by the time simulation ends,
-            # the job is still deferred.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            # There should be two scheduling attempts: one for the initial job and
-            # one when the first deferral is over.
-            self.mgr.scheduler.place.assert_has_calls([call(job1), call(job1)])
-            # Deferred job queue should *NOT* be empty since the job is rejected a second
-            # time and still deferred when simulation completes.
-            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
+            self.env.run()
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 1)
+            # There should be one scheduling attempt.
+            self.mgr.scheduler.place.assert_has_calls([call(job1)])
             self.assertEqual(self.mock_cluster.execute.call_count, 0)
 
     def test_multi_job_reject(self):
@@ -142,22 +134,18 @@ class TestClusterManager(unittest.TestCase):
                 (SchedDecision.REJECT, job1),
                 (SchedDecision.REJECT, job2),
                 (SchedDecision.REJECT, job3),
-                (SchedDecision.REJECT, job1),
-                (SchedDecision.REJECT, job2),
-                (SchedDecision.REJECT, job3),
             ],
         ):
             self.env.process(self.mgr.schedule())
             self.env.process(self.wgen_helper([job1, job2, job3]))
-            self.env.run(until=FLAGS.defer_sched_sec + 1)
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            # When job1 is released from deferral, job2 and job3 are also retried.
-            # Must be in the exact order.
+            self.env.run()
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 3)
+            # FIFO scheduling means when job2 and job3 arrive, job1 is retried.
             self.mgr.scheduler.place.assert_has_calls(
-                [call(job1), call(job2), call(job3), call(job1), call(job2), call(job3)]
+                [call(job1), call(job1), call(job1)]
             )
-            # All three jobs are still deferred when simulation completes.
-            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 3)
+            # All three jobs are still queued when simulation completes.
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 3)
             self.assertEqual(self.mock_cluster.execute.call_count, 0)
 
     def test_mixed_jobs(self):
@@ -182,43 +170,34 @@ class TestClusterManager(unittest.TestCase):
             side_effect=[
                 (SchedDecision.ADMIT, jobs[0]),
                 (SchedDecision.REJECT, jobs[1]),
-                (SchedDecision.ADMIT, jobs[2]),
                 (SchedDecision.ADMIT, jobs[1]),
+                (SchedDecision.ADMIT, jobs[2]),
             ],
         ):
             self.env.process(self.mgr.schedule())
             self.env.process(self.wgen_helper(jobs))
-            # Run simulation until t = 1. Only job1 is processed.
+            # Run simulation until t = 1. Only job1 is admitted.
             self.env.run(until=1)
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            # Job1 is admitted, deferred queue should be empty.
-            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 0)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 1)
             self.mgr.scheduler.place.assert_has_calls([call(jobs[0])])
             self.mock_cluster.execute.assert_called_once_with(jobs[0])
-            # Continue simulation until t = 2. Job2 is processed.
+            # Continue simulation until t = 2. Job2 is rejected.
             self.env.run(until=2)
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            # Job2 is rejected, it is put into the deferred queue.
-            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
-            self.mgr.scheduler.place.assert_has_calls([call(jobs[i]) for i in range(2)])
-            self.mgr.scheduler.place.assert_has_calls([call(jobs[0])])
-            # Continue simulation until right before deferral is done. Job3 is processed.
-            self.env.run(until=FLAGS.defer_sched_sec - 1)
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            # Job3 is admitted, job2 is still in the deferred queue.
-            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
-            self.mock_cluster.execute.assert_has_calls([call(jobs[0]), call(jobs[2])])
-            self.mgr.scheduler.place.assert_has_calls([call(jobs[i]) for i in range(cnt)])
-            # Continue simulation until right after deferral is done. Job2 is retried.
-            self.env.run(until=FLAGS.defer_sched_sec + 2)
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            # Job2 is taken out of the deferred queue, retried and admitted.
-            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 0)
-            self.mgr.scheduler.place.assert_has_calls(
-                [call(jobs[i]) for i in range(cnt)] + [call(jobs[1])]
-            )
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 1)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 1)
+            self.mgr.scheduler.place.assert_has_calls([call(jobs[0]), call(jobs[1])])
+            # Continue simulation until t = 3. Job2 is retried and admitted.
+            self.env.run(until=3)
+            # Job3 arrives and is admitted.
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            # Job2 and job3 is moved to the running queue.
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 3)
             self.mock_cluster.execute.assert_has_calls(
-                [call(jobs[0]), call(jobs[2]), call(jobs[1])]
+                [call(jobs[0]), call(jobs[1]), call(jobs[2])]
+            )
+            self.mgr.scheduler.place.assert_has_calls(
+                [call(jobs[0]), call(jobs[1]), call(jobs[1]), call(jobs[2])]
             )
 
     def test_one_job_running(self):
@@ -236,15 +215,14 @@ class TestClusterManager(unittest.TestCase):
             self.env.run(until=2)
             # The job is admitted and runs for 10 seconds. At t = 2, the job is still
             # in the running queue.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 1)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 1)
             self.assertEqual(self.mgr.next_completion, 10)
             self.mgr.scheduler.place.assert_has_calls([call(job1)])
             self.assertEqual(self.mock_cluster.execute.call_count, 1)
             self.env.run(until=12)
             # Job1 completes at t = 10, so running queue should be empty.
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 0)
             # Next completion time froze at 10.
             self.assertEqual(self.mgr.next_completion, 10)
 
@@ -273,89 +251,33 @@ class TestClusterManager(unittest.TestCase):
             self.env.process(self.wgen_helper([job1, job2, job3]))
             self.env.run(until=6)
             # Job1 is the only job running at t = 5.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 1)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 1)
             self.assertEqual(self.mgr.next_completion, 6)
             self.mgr.scheduler.place.assert_has_calls([call(job1)])
             self.assertEqual(self.mock_cluster.execute.call_count, 1)
             self.env.run(until=7)
             # Job1 should have completed at t = 6.
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 0)
             self.assertEqual(self.mgr.next_completion, 6)
             self.env.run(until=11)
             # Job2 and job3 are running at t = 10.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 2)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 2)
             # Next completion time should be 9 + 2 = 11 (job3).
             self.assertEqual(self.mgr.next_completion, 11)
             self.env.run(until=12)
             # Job3 completes at t = 11, job2 still running.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 1)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 1)
             # Next completion time should be 7 + 5 = 12 (job2).
             self.assertEqual(self.mgr.next_completion, 12)
             self.env.run(until=15)
             # Job2 completes at t = 12.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 0)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 0)
             # Next completion time froze at 12
             self.assertEqual(self.mgr.next_completion, 12)
-
-    def test_running_deferral_interruption(self):
-        """
-        Verify that completed jobs interrupt the deferred jobs.
-        """
-        # Job1 is rejected at t = 0 and deferred to t = 30.
-        job1 = copy.deepcopy(JOB1)
-        job1.duration_sec = 1
-        # Job2 is admitted at t = 2 and completes at t = 7.
-        job2 = copy.deepcopy(JOB1)
-        job2.arrival_time_sec = 2
-        job2.duration_sec = 5
-        with patch(
-            "ClusterManager.scheduling.SchedulingPolicy.place",
-            side_effect=[
-                (SchedDecision.REJECT, job1),
-                (SchedDecision.ADMIT, job2),
-                (SchedDecision.ADMIT, job1),
-            ],
-        ):
-            self.env.process(self.mgr.schedule())
-            self.env.process(self.wgen_helper([job1, job2]))
-            self.env.run(until=2)
-            # Job1 is the only job running at t = 1.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
-            self.assertEqual(self.mgr.next_retry, 0 + FLAGS.defer_sched_sec)
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 0)
-            self.assertEqual(self.mgr.next_completion, 0)
-            self.mgr.scheduler.place.assert_has_calls([call(job1)])
-            self.assertEqual(self.mock_cluster.execute.call_count, 0)
-            self.env.run(until=3)
-            # Job2 is running at t = 2.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertEqual(self.mgr.deferred_job_queue.qsize(), 1)
-            self.assertEqual(self.mgr.next_retry, 0 + FLAGS.defer_sched_sec)
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 1)
-            self.assertEqual(self.mgr.next_completion, 7)
-            self.mgr.scheduler.place.assert_has_calls([call(job1), call(job2)])
-            self.assertEqual(self.mock_cluster.execute.call_count, 1)
-            self.env.run(until=8)
-            # Job2 completes at t = 7. Deferred job1 is interrupted and retried, which is
-            # then accepted.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 1)
-            # Next completion time should be 7 + 1 = 8 (job1).
-            self.assertEqual(self.mgr.next_completion, 8)
-            self.mgr.scheduler.place.assert_has_calls(
-                [call(job1), call(job2), call(job1)]
-            )
-            self.assertEqual(self.mock_cluster.execute.call_count, 2)
 
     def test_new_running_job_interruption(self):
         """
@@ -379,26 +301,23 @@ class TestClusterManager(unittest.TestCase):
             self.env.process(self.wgen_helper([job1, job2]))
             self.env.run(until=2)
             # Job1 is running at t = 1.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 1)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 1)
             self.assertEqual(self.mgr.next_completion, 10)
             self.mgr.scheduler.place.assert_has_calls([call(job1)])
             self.assertEqual(self.mock_cluster.execute.call_count, 1)
             self.env.run(until=3)
             # Job2 is running at t = 2. It interrupts the running queue guard timer waiting
             # for job1.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 2)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 2)
             self.assertEqual(self.mgr.next_completion, 3)
             self.mgr.scheduler.place.assert_has_calls([call(job1), call(job2)])
             self.assertEqual(self.mock_cluster.execute.call_count, 2)
             self.env.run(until=4)
             # Job2 completes at t = 3. Job1 is the next to complete.
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertEqual(self.mgr.running_job_queue.qsize(), 1)
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 1)
             self.assertEqual(self.mgr.next_completion, 10)
             self.mgr.scheduler.place.assert_has_calls([call(job1), call(job2)])
             self.assertEqual(self.mock_cluster.execute.call_count, 2)
@@ -431,9 +350,8 @@ class TestClusterManager(unittest.TestCase):
             self.assertEqual(self.mgr.job_stats, {})
             # Job1 has completed now.
             self.env.run(until=11)
-            self.assertTrue(self.mgr.new_job_queue.empty())
-            self.assertTrue(self.mgr.deferred_job_queue.empty())
-            self.assertTrue(self.mgr.running_job_queue.empty())
+            self.assertEqual(len(self.mgr.new_job_queue.slist), 0)
+            self.assertEqual(len(self.mgr.running_job_queue.slist), 0)
             # Called with job1 but returns job1_sched.
             self.mgr.scheduler.place.assert_has_calls([call(job1)])
             # Job1 is scheduled and completed, statistics are populated.

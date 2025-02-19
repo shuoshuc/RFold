@@ -96,15 +96,11 @@ class TestC1TraceReplayWithSimpy(unittest.TestCase):
             self.assertIsNotNone(job.queueing_delay_sec)
             self.assertIsNotNone(job.wait_on_shape_sec)
             self.assertIsNotNone(job.wait_on_resource_sec)
-        # Job1 and job3 experience queueing, check their queueing delay breakdown.
+        # Job1 to job6 all experience queueing, check job1 queueing delay breakdown.
         job1 = self.mgr.job_stats[1]
-        self.assertEqual(job1.queueing_delay_sec, 6)
+        self.assertEqual(job1.queueing_delay_sec, 2)
         self.assertEqual(job1.wait_on_shape_sec, 0)
-        self.assertEqual(job1.wait_on_resource_sec, 6)
-        job3 = self.mgr.job_stats[3]
-        self.assertEqual(job3.queueing_delay_sec, 6)
-        self.assertEqual(job3.wait_on_shape_sec, 4)
-        self.assertEqual(job3.wait_on_resource_sec, 2)
+        self.assertEqual(job1.wait_on_resource_sec, 2)
         # Expect 14 records in cluster stats, 2 per job.
         self.assertEqual(len(self.mgr.cluster_stats), 14)
         for record in self.mgr.cluster_stats:
