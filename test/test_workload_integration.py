@@ -25,7 +25,7 @@ class TestPhillyTraceReplayWithSimpy(unittest.TestCase):
 
         self.env.process(self.trace.run())
         # Run simulation for 1 second. There should only be one job generated.
-        self.env.run(1)
+        self.env.run(until=1)
         self.mock_mgr.submitJob.assert_called_once_with(
             Job(
                 uuid=0,
@@ -35,7 +35,8 @@ class TestPhillyTraceReplayWithSimpy(unittest.TestCase):
                 arrival_time_sec=0.0,
                 duration_sec=3613033.0,
                 sched_time_sec=None,
-            )
+            ),
+            True,
         )
         # The simulation time should have advanced to t = 1 sec.
         self.assertAlmostEqual(self.env.now, 1.0)
@@ -51,24 +52,6 @@ class TestPhillyTraceReplayWithSimpy(unittest.TestCase):
         self.assertGreaterEqual(self.mock_mgr.submitJob.call_count, 111549)
         # The simulation time should have advanced to a very large time, e.g., t = 10000 sec.
         self.assertGreater(self.env.now, 10000.0)
-
-    def test_trace_stop(self):
-        self.assertEqual(len(self.trace.jobs), 111549)
-
-        self.env.process(self.trace.run(stop_time=1))
-        # Run simulation until completion. There should only be one job generated.
-        self.env.run()
-        self.mock_mgr.submitJob.assert_called_once_with(
-            Job(
-                uuid=0,
-                topology=TopoType.CLOS,
-                shape=(1,),
-                size=1,
-                arrival_time_sec=0.0,
-                duration_sec=3613033.0,
-                sched_time_sec=None,
-            )
-        )
 
 
 class TestC1TraceReplayWithSimpy(unittest.TestCase):
@@ -114,6 +97,43 @@ class TestC1TraceReplayWithSimpy(unittest.TestCase):
             self.assertLessEqual(queued, self.mgr.cluster.numNodes())
             self.assertGreaterEqual(running, 0)
             self.assertLessEqual(running, self.mgr.cluster.numNodes())
+
+    def test_trace_stop_zero_mark(self):
+        self.assertEqual(len(self.trace.jobs), 7)
+
+        mgr_proc = self.env.process(self.mgr.schedule())
+        self.env.process(self.trace.run(time_mark=0))
+        # Run simulation until the jobs in the watch list complete.
+        self.env.run(until=mgr_proc)
+        # Only job 0 should be in the watch list.
+        self.assertEqual(len(self.mgr.job_stats), 1)
+        self.assertIn(0, self.mgr.job_stats)
+        self.assertIsNotNone(self.mgr.job_stats[0].queueing_delay_sec)
+        self.assertIsNotNone(self.mgr.job_stats[0].jct_sec)
+
+    def test_trace_stop_one_mark(self):
+        self.assertEqual(len(self.trace.jobs), 7)
+
+        mgr_proc = self.env.process(self.mgr.schedule())
+        self.env.process(self.trace.run(time_mark=1))
+        # Run simulation until the jobs in the watch list complete.
+        self.env.run(until=mgr_proc)
+        # Only job 0 and 1 should be in the watch list.
+        self.assertEqual(len(self.mgr.job_stats), 2)
+        for uuid in [0, 1]:
+            self.assertIn(uuid, self.mgr.job_stats)
+            self.assertIsNotNone(self.mgr.job_stats[uuid].queueing_delay_sec)
+            self.assertIsNotNone(self.mgr.job_stats[uuid].jct_sec)
+
+    def test_trace_stop_negative_mark(self):
+        self.assertEqual(len(self.trace.jobs), 7)
+
+        mgr_proc = self.env.process(self.mgr.schedule())
+        self.env.process(self.trace.run(time_mark=-1))
+        # Run simulation until the jobs in the watch list complete.
+        self.env.run(until=mgr_proc)
+        # No job should be in the watch list.
+        self.assertEqual(len(self.mgr.job_stats), 0)
 
 
 class TestWorkloadGenWithSimpy(unittest.TestCase):

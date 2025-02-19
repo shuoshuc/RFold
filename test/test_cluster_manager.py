@@ -31,7 +31,7 @@ class TestClusterManagerWithFcfs(unittest.TestCase):
     def wgen_helper(self, jobs: list[Job]):
         for job in jobs:
             yield self.env.timeout(job.arrival_time_sec - self.env.now)
-            self.mgr.submitJob(job)
+            self.mgr.submitJob(job, True)
 
     def test_zero_job(self):
         """

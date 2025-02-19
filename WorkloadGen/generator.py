@@ -117,12 +117,12 @@ class WorkloadGenerator:
             probs = np.array(probs) / sum(probs)
         self.rv_iat = rv_discrete(values=(iats, probs))
 
-    def run(self, stop_time: float = None) -> Iterator[simpy.events.Timeout]:
+    def run(self, time_mark: float = None) -> Iterator[simpy.events.Timeout]:
         """
         Generates jobs indefinitely and enqueues them.
 
         Parameters:
-            stop_time: stop generating jobs when trace duration hits stop time mark.
+            time_mark: jobs generated before this mark must complete.
         """
         while True:
             iat = float(round(self.rv_iat.rvs(size=1)[0]))
@@ -141,9 +141,11 @@ class WorkloadGenerator:
                 new_job.topology = TopoType.T3D_NT
 
             yield self.env.timeout(new_job.arrival_time_sec - self.env.now)
-            self.cluster_mgr.submitJob(new_job)
+            # If a stop time is provided, jobs generated prior to the stop time must all
+            # complete. Otherwise, all jobs must complete.
+            wait_to_complete = True
+            if time_mark is not None and self.abs_time_sec > time_mark:
+                wait_to_complete = False
+            self.cluster_mgr.submitJob(new_job, wait_to_complete)
 
             self.abs_time_sec += iat
-            # If a stop time is provided, stop trace generation when it hits the mark.
-            if stop_time and self.abs_time_sec > stop_time:
-                break

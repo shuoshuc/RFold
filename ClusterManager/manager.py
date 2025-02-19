@@ -75,18 +75,23 @@ class ClusterManager:
         self.next_completion = self.env.now
         # Guard process for the running job queue.
         self.running_guard_proc = env.process(self.runningQueueGuard())
+        # A list of job UUIDs to watch for. Simulation only terminates when they complete.
+        self.jobs_to_watch: list[int] = []
         # A map from job UUID to job, tracking statistics.
         self.job_stats: dict[int, Job] = {}
         # A list of cluster statistics, each tuple is
         # (time, utilization, # jobs running, # jobs queued).
         self.cluster_stats: list[tuple[int, float, int, int]] = []
 
-    def submitJob(self, job: Job):
+    def submitJob(self, job: Job, wait_to_complete: bool):
         """
-        Enqueue a job into the new job queue.
+        Enqueue a job into the new job queue. If `wait_to_complete` is True, simulation
+        only terminates after the job is completed.
         """
         self.new_job_queue.enqueue(job)
         logging.debug(f"t = {self.env.now}, enqueued: {job.short_print()}")
+        if wait_to_complete:
+            self.jobs_to_watch.append(job.uuid)
         self.event_arrival.trigger()
 
     def fetchOneNewJob(self) -> Generator[simpy.events.Event, None, Job]:
@@ -136,6 +141,9 @@ class ClusterManager:
             try:
                 yield self.env.timeout(self.next_completion - self.env.now)
                 self.running_job_queue.remove(job)
+                # This job is being watched, should be removed from the watch list.
+                if job.uuid in self.jobs_to_watch:
+                    self.jobs_to_watch.remove(job.uuid)
                 logging.debug(f"t = {self.env.now}, {job.short_print()} completed")
                 self.completeOnCluster(job)
             except simpy.Interrupt:
@@ -198,6 +206,12 @@ class ClusterManager:
                 # Block until reconfiguration completes, and then execute on the cluster.
                 self.executeOnCluster(job_to_sched)
 
+            # All jobs to watch for have completed, time to exit.
+            if len(self.jobs_to_watch) <= 0:
+                # Flush jobs in all queues if we care about incomplete jobs.
+                # self.flushAllQueues()
+                return
+
     def executeOnCluster(self, job: Job):
         """
         Send the job to the cluster for execution. Timestamp the job with the scheduled
@@ -237,11 +251,11 @@ class ClusterManager:
         self.event_completion.trigger()
         self.logClusterStats()
 
-    def sweepAllQueues(self):
+    def flushAllQueues(self):
         """
-        Sweeps all jobs (new, running) from the queues and add them to `self.job_stats`
+        Flush all jobs (new, running) in the queues and add them to `self.job_stats`
         for complete statistics. This method is destructive so should only be called
-        at the end of the simulation.
+        when the main schedule loop exits.
         """
         for queue in [
             self.new_job_queue,

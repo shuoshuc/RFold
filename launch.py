@@ -60,15 +60,12 @@ def main():
 
     # Start simulation.
     logging.info("Simulation starts")
-    env.process(mgr.schedule())
-    env.process(workload.run(stop_time=FLAGS.sim_sec))
-    # Run the simulation until the specified time.
-    # Note: this will leave some jobs incomplete. To complete all jobs, run until the end
-    # of the trace by setting until=None. However, the draining period would have
-    # different properties since there is no new job arriving.
-    env.run(until=FLAGS.sim_sec)
+    mgr_proc = env.process(mgr.schedule())
+    env.process(workload.run(time_mark=FLAGS.sim_mark_sec))
+    # Run the simulation until the manager process exits.
+    # Note: this might leave some jobs incomplete.
+    env.run(until=mgr_proc)
     logging.info("Simulation completes")
-    mgr.sweepAllQueues()
 
     logging.info("----[Summary]-----")
     mgr.job_stats = dict(sorted(mgr.job_stats.items()))
