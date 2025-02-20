@@ -66,6 +66,10 @@ def main():
     # Note: this might leave some jobs incomplete.
     env.run(until=mgr_proc)
     logging.info("Simulation completes")
+    # Flush jobs in all queues if this is not a replay, as we need incomplete jobs to
+    # form a sustained workload.
+    if not FLAGS.replay_trace:
+        mgr.flushAllQueues()
 
     logging.info("----[Summary]-----")
     mgr.job_stats = dict(sorted(mgr.job_stats.items()))

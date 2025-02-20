@@ -206,10 +206,13 @@ class ClusterManager:
                 # Block until reconfiguration completes, and then execute on the cluster.
                 self.executeOnCluster(job_to_sched)
 
+            # Watch list closes, it will only be drained going forward.
+            if self.env.now > FLAGS.sim_mark_sec:
+                logging.info(
+                    f"Wait list has closed, there are {len(self.jobs_to_watch)} jobs."
+                )
             # All jobs to watch for have completed, time to exit.
             if len(self.jobs_to_watch) <= 0:
-                # Flush jobs in all queues if we care about incomplete jobs.
-                # self.flushAllQueues()
                 return
 
     def executeOnCluster(self, job: Job):

@@ -128,6 +128,8 @@ class WorkloadGenerator:
             iat = float(round(self.rv_iat.rvs(size=1)[0]))
             j = self.rv_size.rvs(size=1)[0]
             new_job = copy.deepcopy(self.jobs[j])
+            if max(new_job.shape) > max(FLAGS.dim):
+                continue
             new_job.uuid = self.uuidgen.fetch()
             new_job.arrival_time_sec = self.abs_time_sec
             # Some job distributions have no info about duration.
