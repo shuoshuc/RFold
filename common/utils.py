@@ -1,6 +1,7 @@
 import csv
 import json
 import logging
+import random
 import simpy
 import matplotlib.pyplot as plt
 import numpy as np
@@ -108,6 +109,31 @@ def viz3D(dimx: int, dimy: int, dimz: int, array: NDArray[np.float64]):
     # Set the aspect of the plot to be equal
     ax.set_box_aspect([1, 1, 0.9])
     plt.show()
+
+
+def factorize(n: int, dim: int) -> tuple[int, int, int]:
+    import sympy
+
+    def _factorize(n):
+        factors = []
+        for p, e in sympy.factorint(n).items():
+            factors.extend([p] * e)
+        return factors
+
+    x = 1
+    y = 1
+    z = 1
+    options = ["x", "y", "z"]
+    for p in _factorize(n):
+        selection = random.choice(options[:dim])
+        if selection == "x":
+            x *= p
+        elif selection == "y":
+            y *= p
+        else:
+            z *= p
+
+    return sorted([x, y, z], reverse=True)
 
 
 def extract_duration(csv_path):
