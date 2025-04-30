@@ -125,7 +125,7 @@ def factorize(n: int, dim: int) -> tuple[int, int, int]:
     z = 1
     options = ["x", "y", "z"]
     for p in _factorize(n):
-        selection = random.choice(options[:dim])
+        selection = str(np.random.choice(options[:dim]))
         if selection == "x":
             x *= p
         elif selection == "y":
