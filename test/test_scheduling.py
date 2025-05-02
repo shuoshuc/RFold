@@ -6,6 +6,7 @@ from unittest.mock import call, MagicMock
 
 from common.job import Job, TopoType
 from Cluster.cluster import Cluster
+from Cluster.topology import Node
 from ClusterManager.scheduling import SchedDecision, SchedulingPolicy
 
 JOB = Job(
@@ -292,3 +293,91 @@ class TestScheduling(unittest.TestCase):
         # Make sure slurm_hilbert picks the first feasible allocation, namely [1-6].
         for x, y, z in coords:
             self.assertIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+
+    def test_reconfig_t2d(self):
+        """
+        Verify the behavior when using reconfig as the policy in 2D torus.
+        """
+        job = Job(
+            uuid=1,
+            topology=TopoType.T2D,
+            shape=(15, 4),
+            size=60,
+            duration_sec=1000,
+            arrival_time_sec=0,
+        )
+
+        # Job topology and cluster mismatch, expect an exception.
+        self.assertRaises(ValueError, self.sched.place, job, "reconfig")
+
+        self.mock_cluster.topo = TopoType.T2D
+        self.mock_cluster.totalIdleXPU.return_value = 1
+        self.mock_cluster.totalIdleNodes.return_value = 1
+        # Insufficient total XPUs available, expect rejection.
+        decision, _ = self.sched.place(job, policy="reconfig")
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        self.mock_cluster.totalIdleXPU.return_value = 64
+        # Insufficient total nodes available, expect rejection.
+        decision, _ = self.sched.place(job, policy="reconfig")
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        self.mock_cluster.totalIdleNodes.return_value = 64
+        self.mock_cluster.dimx = 8
+        self.mock_cluster.dimy = 8
+        self.mock_cluster.blocks = {(0, 0): [], (0, 1): [], (1, 0): [], (1, 1): []}
+        for x in range(8):
+            for y in range(8):
+                node = MagicMock(spec=Node)
+                node.name = f"x{x}-y{y}"
+                block_x = x // 4
+                block_y = y // 4
+                self.mock_cluster.blocks[(block_x, block_y)].append(node)
+
+        self.mock_cluster.toBlockArray.return_value = np.zeros((4, 4))
+        decision, _ = self.sched.place(job, policy="reconfig", rsize=4)
+        self.assertEqual(decision, SchedDecision.REJECT)
+
+        # Ensure that only shape (4, 15) can be scheduled.
+        def side_effect_helper(*args):
+            avail = np.ones((4, 4))
+            names = [node.name for node in args[0]]
+            if "x7-y7" in names:
+                avail[:, -1] = 0
+            return avail
+
+        self.mock_cluster.toBlockArray.side_effect = side_effect_helper
+        decision, job_to_sched = self.sched.place(job, policy="reconfig", rsize=4)
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(job_to_sched.allocation), 60)
+        self.assertEqual(job.shape, (4, 15))
+        for val in job_to_sched.allocation.values():
+            self.assertEqual(val, 1)
+        # Make sure the four nodes are not allocated.
+        for x, y in [(4, 7), (5, 7), (6, 7), (7, 7)]:
+            self.assertNotIn(f"x{x}-y{y}", job_to_sched.allocation)
+
+        # Now try to schedule a 2x2 job in a 8x8 cluster with 8x8 reconfigurable block.
+        # Only the bottom right corner is available.
+        job.allocation = {}
+        job.shape = (2, 2)
+        job.size = 4
+        self.mock_cluster.blocks = {(0, 0): []}
+        for x in range(8):
+            for y in range(8):
+                node = MagicMock(spec=Node)
+                node.name = f"x{x}-y{y}"
+                self.mock_cluster.blocks[(0, 0)].append(node)
+        avail = np.zeros((8, 8))
+        avail[-2:, -2:] = 1
+        self.mock_cluster.toBlockArray.side_effect = None
+        self.mock_cluster.toBlockArray.return_value = avail
+        decision, job_to_sched = self.sched.place(job, policy="reconfig", rsize=8)
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(job_to_sched.allocation), 4)
+        self.assertEqual(job.shape, (2, 2))
+        for val in job_to_sched.allocation.values():
+            self.assertEqual(val, 1)
+        # Make sure the four nodes at the bottom right corner are allocated.
+        for x, y in [(6, 6), (6, 7), (7, 6), (7, 7)]:
+            self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)

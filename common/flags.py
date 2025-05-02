@@ -46,7 +46,8 @@ class Flags:
             type=str,
             default="firstfit",
             help=(
-                "Job placement policy to use. Available options: firstfit, slurm_hilbert."
+                "Job placement policy to use. Available options: "
+                "firstfit, slurm_hilbert, reconfig."
             ),
         )
         self.parser.add_argument(
@@ -72,6 +73,16 @@ class Flags:
                 "Comma separated tuple of dimensions. "
                 "E.g., 16,16 for a 2D torus with 16 nodes in each dimension, "
                 "16,16,16 for a 3D torus with 16 nodes in each dimension."
+            ),
+        )
+        self.parser.add_argument(
+            "--rsize",
+            type=int,
+            default=4,
+            help=(
+                "Reconfigurable block size. "
+                "E.g., an rsize of 4 means a 4x4 or 4x4x4 block of nodes is "
+                "the smallest reconfigurable unit."
             ),
         )
         self.parser.add_argument(
@@ -150,6 +161,10 @@ class Flags:
     @property
     def dim(self):
         return self.args.dim
+
+    @property
+    def rsize(self):
+        return self.args.rsize
 
     @property
     def model_file(self):

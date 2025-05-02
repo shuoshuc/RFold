@@ -6,6 +6,7 @@ from math import ceil
 from numpy.typing import NDArray
 from typing import Optional, Union
 
+from common.flags import FLAGS
 from common.job import Job, TopoType
 from common.utils import viz3D
 from Cluster.topology import Port, Link, Node, Switch
@@ -20,7 +21,7 @@ class Cluster:
     monitoring purposes.
     """
 
-    def __init__(self, env: simpy.core.Environment, spec: dict):
+    def __init__(self, env: simpy.core.Environment, spec: dict, rsize: int = FLAGS.rsize):
         """
         env: simpy environment.
         spec: a parsed JSON object containing the cluster spec.
@@ -31,6 +32,8 @@ class Cluster:
 
         # A map from node name to node object.
         self.nodes: dict[str, Node] = {}
+        # A map from block coordinate to a list of node objects in that block.
+        self.blocks: dict[Union[tuple[int, int], tuple[int, int, int]], list[Node]] = {}
         # A map from port name to port object.
         self.ports: dict[str, Port] = {}
         # A map from link name to link object.
@@ -71,6 +74,13 @@ class Cluster:
                 bits_per_dim=self.bits_per_dim,
             )
             self.nodes[node_obj.name] = node_obj
+            # Group the nodes into reconfigurable blocks.
+            block_coord = [
+                dim // rsize
+                for dim in [node_obj.dimx, node_obj.dimy, node_obj.dimz]
+                if dim is not None
+            ]
+            self.blocks.setdefault(tuple(block_coord), []).append(node_obj)
             # (Clos-only) group nodes into pods.
             if self.topo == TopoType.CLOS:
                 self.pods[node_obj.pod_id][node_obj.name] = node_obj
@@ -175,6 +185,31 @@ class Cluster:
         """
         # TODO: cache the idle nodes.
         return len([n for n in self.nodes.values() if n.numIdleXPU() > 0])
+
+    def toBlockArray(
+        self, nodes: list[Node], rsize: int = FLAGS.rsize
+    ) -> NDArray[np.float64]:
+        """
+        Return a 2D/3D array representation of the reconfigurable block availability.
+        Each element corresponds to the number of idle XPUs on a node.
+        Note: this method only works for 2D/3D mesh/torus topology.
+        """
+        if self.topo in [TopoType.MESH2D, TopoType.T2D]:
+            array = np.zeros((rsize, rsize))
+            for node in nodes:
+                array[node.dimx % rsize, node.dimy % rsize] = node.numIdleXPU()
+            return array
+        elif self.topo in [TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T]:
+            array = np.zeros((rsize, rsize, rsize))
+            for node in nodes:
+                array[
+                    node.dimx % rsize,
+                    node.dimy % rsize,
+                    node.dimz % rsize,
+                ] = node.numIdleXPU()
+            return array
+        else:
+            raise TypeError(f"Topology {self.topo} is not supported.")
 
     def toArray(self) -> NDArray[np.float64]:
         """
