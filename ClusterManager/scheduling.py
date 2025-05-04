@@ -211,7 +211,7 @@ class SchedulingPolicy:
     def _find_slice_with_optical_link_2d(
         self,
         job: Job,
-        block_coord: tuple,
+        block_coord: tuple[int, int],
         nodes: list,
         partial_x: int,
         partial_y: int,
@@ -228,7 +228,8 @@ class SchedulingPolicy:
         top_right = (0, rsize - partial_y)
         bottom_left = (rsize - partial_x, 0)
         bottom_right = (rsize - partial_x, rsize - partial_y)
-        for i, j in [top_left, top_right, bottom_left, bottom_right]:
+        # De-duplicate the locations.
+        for i, j in set([top_left, top_right, bottom_left, bottom_right]):
             if np.all(avail[i : i + partial_x, j : j + partial_y] > 0):
                 base_x, base_y = block_coord
                 for local_x in range(i, i + partial_x):
@@ -248,83 +249,178 @@ class SchedulingPolicy:
             # (2) full_x partially empty blocks, each of shape (RSIZE, partial_y).
             # (3) full_y partially empty blocks, each of shape (partial_x, RSIZE).
             # (4) one partially empty block, of shape (partial_x, partial_y).
-            x_shape, y_shape = shape
-            full_x = x_shape // rsize
-            full_y = y_shape // rsize
-            partial_x = x_shape % rsize
-            partial_y = y_shape % rsize
+            full_x, full_y = map(int, np.array(shape) // rsize)
+            partial_x, partial_y = map(int, np.array(shape) % rsize)
 
-            full_block_needed = full_x * full_y
-            partial_x_needed = full_y if partial_x > 0 else 0
-            partial_y_needed = full_x if partial_y > 0 else 0
-            corner_needed = 1 if partial_x > 0 and partial_y > 0 else 0
-            full_block_found = 0
-            partial_x_found = 0
-            partial_y_found = 0
-            corner_found = 0
+            num_needed = {
+                "full_block": full_x * full_y,
+                "partial_x": full_y if partial_x > 0 else 0,
+                "partial_y": full_x if partial_y > 0 else 0,
+                "corner": 1 if partial_x > 0 and partial_y > 0 else 0,
+            }
+            num_found = {
+                "full_block": 0,
+                "partial_x": 0,
+                "partial_y": 0,
+                "corner": 0,
+            }
             # Make sure to iterate over the blocks only once to avoid double allocation.
             for block_coord, nodes in self.cluster.blocks.items():
-                avail = self.cluster.toBlockArray(nodes)
                 # (1) Look for `full_block_needed` completely empty blocks.
-                if full_block_found < full_block_needed:
+                if num_found["full_block"] < num_needed["full_block"]:
+                    avail = self.cluster.toBlockArray(nodes)
                     if np.all(avail > 0):
-                        logging.debug(f"Block {block_coord} usable")
-                        full_block_found += 1
+                        num_found["full_block"] += 1
                         for node in nodes:
                             job.allocation[node.name] = 1
                         # Block is allocated, move on to the next block.
                         continue
 
-                # (2) Look for `partial_y_needed` partially empty blocks, each of shape (RSIZE, partial_y).
-                if partial_y > 0 and partial_y_found < partial_y_needed:
-                    found = self._find_slice_with_optical_link_2d(
-                        job=job,
-                        block_coord=block_coord,
-                        nodes=nodes,
-                        partial_x=rsize,
-                        partial_y=partial_y,
-                        rsize=rsize,
-                    )
-                    if found:
-                        partial_y_found += 1
-                        # Block is allocated, move on to the next block.
-                        continue
-
-                # (3) Look for `partial_x_needed` partially empty blocks, each of shape (partial_x, RSIZE).
-                if partial_x > 0 and partial_x_found < partial_x_needed:
-                    found = self._find_slice_with_optical_link_2d(
-                        job=job,
-                        block_coord=block_coord,
-                        nodes=nodes,
-                        partial_x=partial_x,
-                        partial_y=rsize,
-                        rsize=rsize,
-                    )
-                    if found:
-                        partial_x_found += 1
-                        # Block is allocated, move on to the next block.
-                        continue
-
-                # (4) Look for `corner_needed` partially empty block, of shape (partial_x, partial_y).
-                if partial_x > 0 and partial_y > 0 and corner_found < corner_needed:
-                    found = self._find_slice_with_optical_link_2d(
-                        job=job,
-                        block_coord=block_coord,
-                        nodes=nodes,
-                        partial_x=partial_x,
-                        partial_y=partial_y,
-                        rsize=rsize,
-                    )
-                    if found:
-                        corner_found += 1
+                # (2)-(4) Look for partial blocks.
+                for counter_name, x, y in [
+                    ("partial_x", partial_x, rsize),
+                    ("partial_y", rsize, partial_y),
+                    ("corner", partial_x, partial_y),
+                ]:
+                    if num_found[counter_name] < num_needed[counter_name]:
+                        found = self._find_slice_with_optical_link_2d(
+                            job=job,
+                            block_coord=block_coord,
+                            nodes=nodes,
+                            partial_x=x,
+                            partial_y=y,
+                            rsize=rsize,
+                        )
+                        if found:
+                            num_found[counter_name] += 1
 
             # Check if there are enough blocks to satisfy the job shape.
-            if (
-                full_block_found >= full_block_needed
-                and partial_x_found >= partial_x_needed
-                and partial_y_found >= partial_y_needed
-                and corner_found >= corner_needed
-            ):
+            if all(num_found[key] >= num_needed[key] for key in num_needed):
+                job.shape = shape
+                return SchedDecision.ADMIT, job
+            else:
+                # Reset the job allocation and retry.
+                job.allocation = {}
+
+        # If we reach here, allocation is unsuccessful.
+        logging.debug(f"Job {job.uuid} rejected, not enough empty blocks found")
+        job.logRejectReason(self.env.now, "shape")
+        return SchedDecision.REJECT, job
+
+    def _find_slice_with_optical_link_3d(
+        self,
+        job: Job,
+        block_coord: tuple[int, int, int],
+        nodes: list,
+        partial_x: int,
+        partial_y: int,
+        partial_z: int,
+        rsize: int,
+    ) -> bool:
+        """
+        Find a feasible partial_x * partial_y * partial_z shaped submesh.
+        Must be at one of the eight corners.
+        If allocation is successful, update the job in place.
+        Return a boolean indicating whether the allocation was successful.
+        """
+        avail = self.cluster.toBlockArray(nodes)
+        loc1 = (0, 0, 0)
+        loc2 = (rsize - partial_x, 0, 0)
+        loc3 = (0, rsize - partial_y, 0)
+        loc4 = (0, 0, rsize - partial_z)
+        loc5 = (rsize - partial_x, rsize - partial_y, 0)
+        loc6 = (rsize - partial_x, 0, rsize - partial_z)
+        loc7 = (0, rsize - partial_y, rsize - partial_z)
+        loc8 = (rsize - partial_x, rsize - partial_y, rsize - partial_z)
+        # De-duplicate the locations.
+        for i, j, k in set([loc1, loc2, loc3, loc4, loc5, loc6, loc7, loc8]):
+            if np.all(avail[i : i + partial_x, j : j + partial_y, k : k + partial_z] > 0):
+                base_x, base_y, base_z = block_coord
+                for local_x in range(i, i + partial_x):
+                    for local_y in range(j, j + partial_y):
+                        for local_z in range(k, k + partial_z):
+                            # Cast local coordinates to global coordinates.
+                            x_coord = base_x * rsize + local_x
+                            y_coord = base_y * rsize + local_y
+                            z_coord = base_z * rsize + local_z
+                            job.allocation[f"x{x_coord}-y{y_coord}-z{z_coord}"] = 1
+                return True
+        return False
+
+    def _reconfig_3d(self, job: Job, rsize: int) -> Tuple[SchedDecision, Job]:
+        shapes = list(permutations(job.shape))
+        for shape in shapes:
+            # A job shape of (x, y, z) can be divided into several chunks:
+            # (1) full_x * full_y completely empty reconfigurable blocks.
+            # (2) xy face: (RSIZE, RSIZE, partial_z) * full_x * full_y partially empty blocks.
+            # (3) xz face: (RSIZE, partial_y, RSIZE) * full_x * full_z partially empty blocks.
+            # (4) yz face: (partial_x, RSIZE, RSIZE) * full_y * full_z partially empty blocks.
+            # (5) x edge: (RSIZE, partial_y, partial_z) * full_x partially empty blocks.
+            # (6) y edge: (partial_x, RSIZE, partial_z) * full_y partially empty blocks.
+            # (7) z edge: (partial_x, partial_y, RSIZE) * full_z partially empty blocks.
+            # (8) corner: (partial_x, partial_y, partial_z) * 1 partially empty block.
+            full_x, full_y, full_z = map(int, np.array(shape) // rsize)
+            partial_x, partial_y, partial_z = map(int, np.array(shape) % rsize)
+
+            num_needed = {
+                "full_block": full_x * full_y * full_z,
+                "face_xy": full_x * full_y if partial_z > 0 else 0,
+                "face_xz": full_x * full_z if partial_y > 0 else 0,
+                "face_yz": full_y * full_z if partial_x > 0 else 0,
+                "edge_x": full_x if partial_y * partial_z > 0 else 0,
+                "edge_y": full_y if partial_x * partial_z > 0 else 0,
+                "edge_z": full_z if partial_x * partial_y > 0 else 0,
+                "corner": 1 if partial_x * partial_y * partial_z > 0 else 0,
+            }
+            num_found = {
+                "full_block": 0,
+                "face_xy": 0,
+                "face_xz": 0,
+                "face_yz": 0,
+                "edge_x": 0,
+                "edge_y": 0,
+                "edge_z": 0,
+                "corner": 0,
+            }
+
+            # Make sure to iterate over the blocks only once to avoid double allocation.
+            for block_coord, nodes in self.cluster.blocks.items():
+                # (1) Look for `full_block_needed` completely empty blocks.
+                if num_found["full_block"] < num_needed["full_block"]:
+                    avail = self.cluster.toBlockArray(nodes)
+                    if np.all(avail > 0):
+                        num_found["full_block"] += 1
+                        for node in nodes:
+                            job.allocation[node.name] = 1
+                        # Block is allocated, move on to the next block.
+                        continue
+
+                # (2)-(8) Look for partial blocks.
+                for counter_name, x, y, z in [
+                    ("face_xy", rsize, rsize, partial_z),
+                    ("face_xz", rsize, partial_y, rsize),
+                    ("face_yz", partial_x, rsize, rsize),
+                    ("edge_x", rsize, partial_y, partial_z),
+                    ("edge_y", partial_x, rsize, partial_z),
+                    ("edge_z", partial_x, partial_y, rsize),
+                    ("corner", partial_x, partial_y, partial_z),
+                ]:
+                    if num_found[counter_name] < num_needed[counter_name]:
+                        found = self._find_slice_with_optical_link_3d(
+                            job=job,
+                            block_coord=block_coord,
+                            nodes=nodes,
+                            partial_x=x,
+                            partial_y=y,
+                            partial_z=z,
+                            rsize=rsize,
+                        )
+                        if found:
+                            num_found[counter_name] += 1
+                            continue
+
+            # Check if there are enough blocks to satisfy the job shape.
+            if all(num_found[key] >= num_needed[key] for key in num_needed):
                 job.shape = shape
                 return SchedDecision.ADMIT, job
             else:
@@ -348,7 +444,7 @@ class SchedulingPolicy:
         if job.topology in (TopoType.MESH2D, TopoType.T2D):
             return self._reconfig_2d(job, rsize)
         elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
-            pass
+            return self._reconfig_3d(job, rsize)
 
     def _slurm_hilbert(self, job: Job) -> Tuple[SchedDecision, Job]:
         """
