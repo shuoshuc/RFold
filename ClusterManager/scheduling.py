@@ -6,12 +6,13 @@ from enum import Enum
 from hilbert import decode as hdecode
 from math import ceil, prod
 from numpy.typing import NDArray
-from typing import Optional, Tuple
+from typing import Optional, Generator
 
 from common.flags import FLAGS
 from common.job import Job, TopoType
+from common.utils import find_simple_path
 from Cluster.cluster import Cluster
-from itertools import permutations
+from itertools import permutations, combinations
 
 
 class SchedDecision(Enum):
@@ -33,7 +34,7 @@ class SchedulingPolicy:
         self.cluster = cluster
         random.seed(42)
 
-    def randDecision(self, job: Job) -> Tuple[SchedDecision, Job]:
+    def randDecision(self, job: Job) -> tuple[SchedDecision, Job]:
         """
         Makes a random scheduling decision and does not modify the given job.
         To be used for testing purposes.
@@ -124,7 +125,7 @@ class SchedulingPolicy:
 
     def _fit_2d(
         self, avail_array: NDArray[np.float64], job: Job
-    ) -> Tuple[SchedDecision, Job]:
+    ) -> tuple[SchedDecision, Job]:
         """
         Fits a 2D job into the cluster.
         Performs transposition if the original placement fails.
@@ -148,7 +149,7 @@ class SchedulingPolicy:
 
     def _fit_3d(
         self, avail_array: NDArray[np.float64], job: Job
-    ) -> Tuple[SchedDecision, Job]:
+    ) -> tuple[SchedDecision, Job]:
         """
         Fits a 3D job into the cluster.
         Performs transposition if the original placement fails.
@@ -194,7 +195,7 @@ class SchedulingPolicy:
         req_node_cnt = len(job.shape) if job.topology == TopoType.CLOS else job.size
         return req_node_cnt <= self.cluster.totalIdleNodes()
 
-    def _firstfit(self, job: Job) -> Tuple[SchedDecision, Job]:
+    def _firstfit(self, job: Job) -> tuple[SchedDecision, Job]:
         """
         First-fit scheduling policy.
         """
@@ -208,42 +209,41 @@ class SchedulingPolicy:
         elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
             return self._fit_3d(self.cluster.toArray(), job)
 
-    def _find_slice_with_optical_link_2d(
+    def _find_slices_loc_2d(
         self,
-        job: Job,
-        block_coord: tuple[int, int],
-        nodes: list,
+        candidates: list[tuple[int, int]],
+        blocks_needed: int,
         partial_x: int,
         partial_y: int,
+        loc: tuple[int, int],
         rsize: int,
-    ) -> bool:
+    ) -> tuple[list[tuple], list[str]]:
         """
-        Find a feasible partial_x * partial_y shaped submesh.
-        Must be at one of the four corners.
-        If allocation is successful, update the job in place.
-        Return a boolean indicating whether the allocation was successful.
+        Find `blocks_needed` number of partial_x * partial_y shaped submesh.
+        Must be at the specified corner (`loc`).
+        Returns the set of blocks picked along with a list of node names to allocate.
         """
-        avail = self.cluster.toBlockArray(nodes)
-        top_left = (0, 0)
-        top_right = (0, rsize - partial_y)
-        bottom_left = (rsize - partial_x, 0)
-        bottom_right = (rsize - partial_x, rsize - partial_y)
-        # De-duplicate the locations.
-        for i, j in set([top_left, top_right, bottom_left, bottom_right]):
+        blocks_to_allocate = []
+        nodes_to_allocate = []
+        for block_coord in candidates:
+            if len(blocks_to_allocate) >= blocks_needed:
+                break
+            nodes = self.cluster.blocks[block_coord]
+            avail = self.cluster.toBlockArray(nodes)
+            i, j = loc
             if np.all(avail[i : i + partial_x, j : j + partial_y] > 0):
+                blocks_to_allocate.append(block_coord)
                 base_x, base_y = block_coord
                 for local_x in range(i, i + partial_x):
                     for local_y in range(j, j + partial_y):
                         # Cast local coordinates to global coordinates.
                         x_coord = base_x * rsize + local_x
                         y_coord = base_y * rsize + local_y
-                        job.allocation[f"x{x_coord}-y{y_coord}"] = 1
-                return True
-        return False
+                        nodes_to_allocate.append(f"x{x_coord}-y{y_coord}")
+        return (blocks_to_allocate, nodes_to_allocate)
 
-    def _reconfig_2d(self, job: Job, rsize: int) -> Tuple[SchedDecision, Job]:
-        shapes = list(permutations(job.shape))
-        for shape in shapes:
+    def _reconfig_2d(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
+        for shape in permutations(job.shape):
             # A job shape of (x, y) can be divided into several chunks:
             # (1) full_x * full_y completely empty reconfigurable blocks.
             # (2) full_x partially empty blocks, each of shape (RSIZE, partial_y).
@@ -264,35 +264,42 @@ class SchedulingPolicy:
                 "partial_y": 0,
                 "corner": 0,
             }
-            # Make sure to iterate over the blocks only once to avoid double allocation.
-            for block_coord, nodes in self.cluster.blocks.items():
-                # (1) Look for `full_block_needed` completely empty blocks.
-                if num_found["full_block"] < num_needed["full_block"]:
-                    avail = self.cluster.toBlockArray(nodes)
-                    if np.all(avail > 0):
-                        num_found["full_block"] += 1
-                        for node in nodes:
-                            job.allocation[node.name] = 1
-                        # Block is allocated, move on to the next block.
-                        continue
 
-                # (2)-(4) Look for partial blocks.
-                for counter_name, x, y in [
-                    ("partial_x", partial_x, rsize),
-                    ("partial_y", rsize, partial_y),
-                    ("corner", partial_x, partial_y),
-                ]:
-                    if num_found[counter_name] < num_needed[counter_name]:
-                        found = self._find_slice_with_optical_link_2d(
-                            job=job,
-                            block_coord=block_coord,
-                            nodes=nodes,
-                            partial_x=x,
-                            partial_y=y,
-                            rsize=rsize,
-                        )
-                        if found:
-                            num_found[counter_name] += 1
+            allocated = set()
+            candidates = list(self.cluster.blocks.keys())
+            for counter_name, x, y in [
+                ("full_block", rsize, rsize),
+                ("partial_x", partial_x, rsize),
+                ("partial_y", rsize, partial_y),
+                ("corner", partial_x, partial_y),
+            ]:
+                # Skip the blocks that are not needed.
+                if num_needed[counter_name] <= 0:
+                    continue
+
+                top_left = (0, 0)
+                top_right = (0, rsize - y)
+                bottom_left = (rsize - x, 0)
+                bottom_right = (rsize - x, rsize - y)
+                # De-duplicate the locations.
+                for loc in set([top_left, top_right, bottom_left, bottom_right]):
+                    blocks_to_alloc, nodes_to_alloc = self._find_slices_loc_2d(
+                        candidates=candidates,
+                        blocks_needed=num_needed[counter_name],
+                        partial_x=x,
+                        partial_y=y,
+                        loc=loc,
+                        rsize=rsize,
+                    )
+                    # Enough blocks found at this location. Done for this partial shape.
+                    if len(blocks_to_alloc) >= num_needed[counter_name]:
+                        num_found[counter_name] = len(blocks_to_alloc)
+                        for block_coord in blocks_to_alloc:
+                            allocated.add(block_coord)
+                            candidates.remove(block_coord)
+                            for node in nodes_to_alloc:
+                                job.allocation[node] = 1
+                        break
 
             # Check if there are enough blocks to satisfy the job shape.
             if all(num_found[key] >= num_needed[key] for key in num_needed):
@@ -307,34 +314,31 @@ class SchedulingPolicy:
         job.logRejectReason(self.env.now, "shape")
         return SchedDecision.REJECT, job
 
-    def _find_slice_with_optical_link_3d(
+    def _find_slices_loc_3d(
         self,
-        job: Job,
-        block_coord: tuple[int, int, int],
-        nodes: list,
+        candidates: list[tuple[int, int, int]],
+        blocks_needed: int,
         partial_x: int,
         partial_y: int,
         partial_z: int,
+        loc: tuple[int, int, int],
         rsize: int,
-    ) -> bool:
+    ) -> tuple[list[tuple], list[str]]:
         """
-        Find a feasible partial_x * partial_y * partial_z shaped submesh.
-        Must be at one of the eight corners.
-        If allocation is successful, update the job in place.
-        Return a boolean indicating whether the allocation was successful.
+        Find `blocks_needed` number of partial_x * partial_y * partial_z shaped submesh.
+        Must be at the specified corner (`loc`).
+        Returns the set of blocks picked along with a list of node names to allocate.
         """
-        avail = self.cluster.toBlockArray(nodes)
-        loc1 = (0, 0, 0)
-        loc2 = (rsize - partial_x, 0, 0)
-        loc3 = (0, rsize - partial_y, 0)
-        loc4 = (0, 0, rsize - partial_z)
-        loc5 = (rsize - partial_x, rsize - partial_y, 0)
-        loc6 = (rsize - partial_x, 0, rsize - partial_z)
-        loc7 = (0, rsize - partial_y, rsize - partial_z)
-        loc8 = (rsize - partial_x, rsize - partial_y, rsize - partial_z)
-        # De-duplicate the locations.
-        for i, j, k in set([loc1, loc2, loc3, loc4, loc5, loc6, loc7, loc8]):
+        blocks_to_allocate = []
+        nodes_to_allocate = []
+        for block_coord in candidates:
+            if len(blocks_to_allocate) >= blocks_needed:
+                break
+            nodes = self.cluster.blocks[block_coord]
+            avail = self.cluster.toBlockArray(nodes)
+            i, j, k = loc
             if np.all(avail[i : i + partial_x, j : j + partial_y, k : k + partial_z] > 0):
+                blocks_to_allocate.append(block_coord)
                 base_x, base_y, base_z = block_coord
                 for local_x in range(i, i + partial_x):
                     for local_y in range(j, j + partial_y):
@@ -343,13 +347,11 @@ class SchedulingPolicy:
                             x_coord = base_x * rsize + local_x
                             y_coord = base_y * rsize + local_y
                             z_coord = base_z * rsize + local_z
-                            job.allocation[f"x{x_coord}-y{y_coord}-z{z_coord}"] = 1
-                return True
-        return False
+                            nodes_to_allocate.append(f"x{x_coord}-y{y_coord}-z{z_coord}")
+        return (blocks_to_allocate, nodes_to_allocate)
 
-    def _reconfig_3d(self, job: Job, rsize: int) -> Tuple[SchedDecision, Job]:
-        shapes = list(permutations(job.shape))
-        for shape in shapes:
+    def _reconfig_3d(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
+        for shape in permutations(job.shape):
             # A job shape of (x, y, z) can be divided into several chunks:
             # (1) full_x * full_y completely empty reconfigurable blocks.
             # (2) xy face: (RSIZE, RSIZE, partial_z) * full_x * full_y partially empty blocks.
@@ -383,41 +385,50 @@ class SchedulingPolicy:
                 "corner": 0,
             }
 
-            # Make sure to iterate over the blocks only once to avoid double allocation.
-            for block_coord, nodes in self.cluster.blocks.items():
-                # (1) Look for `full_block_needed` completely empty blocks.
-                if num_found["full_block"] < num_needed["full_block"]:
-                    avail = self.cluster.toBlockArray(nodes)
-                    if np.all(avail > 0):
-                        num_found["full_block"] += 1
-                        for node in nodes:
-                            job.allocation[node.name] = 1
-                        # Block is allocated, move on to the next block.
-                        continue
+            allocated = set()
+            candidates = list(self.cluster.blocks.keys())
+            for counter_name, x, y, z in [
+                ("full_block", rsize, rsize, rsize),
+                ("face_xy", rsize, rsize, partial_z),
+                ("face_xz", rsize, partial_y, rsize),
+                ("face_yz", partial_x, rsize, rsize),
+                ("edge_x", rsize, partial_y, partial_z),
+                ("edge_y", partial_x, rsize, partial_z),
+                ("edge_z", partial_x, partial_y, rsize),
+                ("corner", partial_x, partial_y, partial_z),
+            ]:
+                # Skip the blocks that are not needed.
+                if num_needed[counter_name] <= 0:
+                    continue
 
-                # (2)-(8) Look for partial blocks.
-                for counter_name, x, y, z in [
-                    ("face_xy", rsize, rsize, partial_z),
-                    ("face_xz", rsize, partial_y, rsize),
-                    ("face_yz", partial_x, rsize, rsize),
-                    ("edge_x", rsize, partial_y, partial_z),
-                    ("edge_y", partial_x, rsize, partial_z),
-                    ("edge_z", partial_x, partial_y, rsize),
-                    ("corner", partial_x, partial_y, partial_z),
-                ]:
-                    if num_found[counter_name] < num_needed[counter_name]:
-                        found = self._find_slice_with_optical_link_3d(
-                            job=job,
-                            block_coord=block_coord,
-                            nodes=nodes,
-                            partial_x=x,
-                            partial_y=y,
-                            partial_z=z,
-                            rsize=rsize,
-                        )
-                        if found:
-                            num_found[counter_name] += 1
-                            continue
+                loc1 = (0, 0, 0)
+                loc2 = (rsize - x, 0, 0)
+                loc3 = (0, rsize - y, 0)
+                loc4 = (0, 0, rsize - z)
+                loc5 = (rsize - x, rsize - y, 0)
+                loc6 = (rsize - x, 0, rsize - z)
+                loc7 = (0, rsize - y, rsize - z)
+                loc8 = (rsize - x, rsize - y, rsize - z)
+                # De-duplicate the locations.
+                for loc in set([loc1, loc2, loc3, loc4, loc5, loc6, loc7, loc8]):
+                    blocks_to_alloc, nodes_to_alloc = self._find_slices_loc_3d(
+                        candidates=candidates,
+                        blocks_needed=num_needed[counter_name],
+                        partial_x=x,
+                        partial_y=y,
+                        partial_z=z,
+                        loc=loc,
+                        rsize=rsize,
+                    )
+                    # Enough blocks found at this location. Done for this partial shape.
+                    if len(blocks_to_alloc) >= num_needed[counter_name]:
+                        num_found[counter_name] = len(blocks_to_alloc)
+                        for block_coord in blocks_to_alloc:
+                            allocated.add(block_coord)
+                            candidates.remove(block_coord)
+                            for node in nodes_to_alloc:
+                                job.allocation[node] = 1
+                        break
 
             # Check if there are enough blocks to satisfy the job shape.
             if all(num_found[key] >= num_needed[key] for key in num_needed):
@@ -432,7 +443,7 @@ class SchedulingPolicy:
         job.logRejectReason(self.env.now, "shape")
         return SchedDecision.REJECT, job
 
-    def _reconfig(self, job: Job, rsize: int) -> Tuple[SchedDecision, Job]:
+    def _reconfig(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
         """
         Reconfigurable scheduling policy.
         """
@@ -446,7 +457,175 @@ class SchedulingPolicy:
         elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
             return self._reconfig_3d(job, rsize)
 
-    def _slurm_hilbert(self, job: Job) -> Tuple[SchedDecision, Job]:
+    def block_candidates(
+        self,
+        used_blocks_avail: dict[tuple, NDArray],
+        empty_blocks_avail: dict[tuple, NDArray],
+        job_size: int,
+    ) -> list[tuple[int, ...]]:
+        """
+        Find the best block candidates for a job of a given size.
+        The selection logic is as follows:
+        (1) If used blocks do not provide enough nodes, then add a few empty blocks.
+        (2) Sort the blocks from least utilized to most utilized.
+        (3) Select the blocks until the job size is satisfied. This ensures minimum blocks used.
+
+        Returns:
+            A list of block coordinates that can host the job.
+            If no blocks are found, return an empty list.
+        """
+        used_block_map = used_blocks_avail.copy()
+        empty_block_map = empty_blocks_avail.copy()
+        while sum(np.sum(block) for block in used_block_map.values()) < job_size:
+            # Infeasible to fit the job in current blocks.
+            if not empty_block_map:
+                return []
+            coord, array = empty_block_map.popitem()
+            used_block_map[coord] = array
+        # Sort blocks from least utilized to most utilized.
+        used_block_map = dict(
+            sorted(
+                used_block_map.items(),
+                key=lambda item: np.sum(item[1]),
+                reverse=True,
+            )
+        )
+        curr_sum = 0
+        candidates = []
+        for coord, array in used_block_map.items():
+            curr_sum += np.sum(array)
+            candidates.append(coord)
+            if curr_sum >= job_size:
+                return candidates
+
+        # If we reach here, it means we have not found enough blocks.
+        return []
+
+    def block_candidates_generator(
+        self,
+        all_block_avail: dict[tuple, np.ndarray],
+        job_size: int,
+    ) -> Generator[tuple[tuple[int, ...]], None, None]:
+        """
+        Generates all possible combinations of block indices that can host a job
+        of a given size, yielding them in a sorted order.
+
+        The sorting criteria are (in order of priority):
+        1. Fewer blocks are ranked higher.
+        2. If # blocks is the same, combinations with total available nodes
+        closest to (and >=) job_size are ranked higher.
+        3. If still tied, combinations where the higher minimum current utilization
+        among its constituent blocks are ranked higher.
+
+        Args:
+            all_block_avail: A dict of NumPy arrays representing block availability.
+            job_size: The number of nodes the job requires.
+        """
+        # Iterate through the number of blocks in a combination.
+        # This handles the primary metric (fewer blocks first) naturally.
+        min_blocks = ceil(job_size / next(iter(all_block_avail.values())).size)
+        max_blocks = ceil(job_size / next(iter(all_block_avail.values())).shape[0])
+        for nblock in range(min_blocks, max_blocks + 1):
+            candidates_with_metrics = []
+            for coords in combinations(all_block_avail.keys(), nblock):
+                # print(f"Finding combination of {nblock} blocks: {coords}")
+                combo_total_free = sum(np.sum(all_block_avail[coord]) for coord in coords)
+                # This combination can host the job.
+                if combo_total_free >= job_size:
+                    # Metric 2: diff between free nodes and job size
+                    diff = combo_total_free - job_size
+
+                    combo_util = []
+                    for coord in coords:
+                        num_free = np.sum(all_block_avail[coord])
+                        block_capacity = all_block_avail[coord].size
+                        util = (block_capacity - num_free) / block_capacity
+                        combo_util.append(util)
+                    # Metric 3: Minimum block utilization in combo
+                    # Higher actual minimum utilization is better.
+                    # Negative utilization ranks higher in ascending order.
+                    min_util = -min(combo_util)
+
+                    candidates_with_metrics.append((diff, min_util, coords))
+                if len(candidates_with_metrics) > 1000:
+                    # Limit the number of candidates to avoid excessive computation.
+                    break
+
+            # Sort candidates based on metric 2 and 3.
+            candidates_with_metrics.sort(key=lambda x: (x[0], x[1]))
+
+            # Yield the sorted combinations for the current nblock.
+            for _, _, coords in candidates_with_metrics:
+                yield coords
+
+    def _folding(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
+        """
+        Torus folding scheduling policy.
+        """
+
+        def _is_1d_job(shape: tuple) -> bool:
+            """
+            Check if the job is 1D.
+            Note: single node job is technically 1D but ignored since it cannot be folded.
+            """
+            return sum(dim != 1 for dim in shape) == 1
+
+        # TODO: generalize to other topologies.
+        if job.topology in (TopoType.CLOS,):
+            logging.debug(f"Job {job.uuid} rejected, unsupported topology.")
+            return SchedDecision.REJECT, job
+
+        if _is_1d_job(job.shape):
+            logging.info(f"1D job, shape: {job.shape}")
+            used_blocks_avail = {}
+            empty_blocks_avail = {}
+            for coord, nodes in self.cluster.blocks.items():
+                avail = self.cluster.toBlockArray(nodes, rsize)
+                # Skip blocks that are almost full.
+                if np.sum(avail) <= 1:
+                    continue
+                if np.sum(avail) >= rsize ** len(job.shape):
+                    empty_blocks_avail[coord] = avail
+                else:
+                    used_blocks_avail[coord] = avail
+            block_coords = self.block_candidates(
+                used_blocks_avail, empty_blocks_avail, job.size
+            )
+            if block_coords:
+                logging.debug(f"Candidate block coordinates: {block_coords}")
+                for coord in block_coords[:-1]:
+                    for node in self.cluster.blocks[coord]:
+                        if node.numIdleXPU() > 0:
+                            job.allocation[node.name] = 1
+                last_block = {**used_blocks_avail, **empty_blocks_avail}[block_coords[-1]]
+                for i in range(last_block.ndim):
+                    print(
+                        f"axis={i}, last block: {block_coords[-1]}, nodes need: {job.size - len(job.allocation)}, nodes avail: {np.sum(last_block)}, block avail:\n{last_block}"
+                    )
+                    path = find_simple_path(
+                        block_coords[-1],
+                        last_block,
+                        job.size - len(job.allocation),
+                        i,
+                        rsize,
+                    )
+                    if path:
+                        logging.debug(f"Found path: {path}")
+                        for node_coord in path:
+                            prefix = ("x", "y", "z")[: len(node_coord)]
+                            job.allocation[
+                                "-".join([f"{p}{c}" for p, c in zip(prefix, node_coord)])
+                            ] = 1
+                        return SchedDecision.ADMIT, job
+                # Reset the job allocation and fall back to normal scheduling.
+                job.allocation = {}
+
+        if job.topology in (TopoType.MESH2D, TopoType.T2D):
+            return self._reconfig_2d(job, rsize)
+        elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
+            return self._reconfig_3d(job, rsize)
+
+    def _slurm_hilbert(self, job: Job) -> tuple[SchedDecision, Job]:
         """
         The SLURM scheduling policy using Hilbert curve. Each node in N-dimensional topology
         is mapping to a linear curve using the Hilbert index. Nodes that are close to each other
@@ -495,7 +674,7 @@ class SchedulingPolicy:
 
     def place(
         self, job: Job, policy: str = FLAGS.place_policy, rsize: int = FLAGS.rsize
-    ) -> Tuple[SchedDecision, Job]:
+    ) -> tuple[SchedDecision, Job]:
         """
         Make a scheduling decision for a job. Note that the job (e.g., shape, duration)
         could be modifed to achieve a more desirable scheduling decision. But if the job
@@ -519,6 +698,8 @@ class SchedulingPolicy:
             return self._firstfit(job)
         elif policy == "reconfig":
             return self._reconfig(job, rsize)
+        elif policy == "folding":
+            return self._folding(job, rsize)
         elif policy == "slurm_hilbert":
             return self._slurm_hilbert(job)
         # The default fallback is to reject all jobs.

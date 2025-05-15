@@ -357,6 +357,23 @@ class TestScheduling(unittest.TestCase):
         for x, y in [(4, 7), (5, 7), (6, 7), (7, 7)]:
             self.assertNotIn(f"x{x}-y{y}", job_to_sched.allocation)
 
+        job.shape = (12, 1)
+        job.size = 12
+
+        def side_effect_helper2(*args):
+            names = [node.name for node in args[0]]
+            avail = np.zeros((4, 4))
+            if "x0-y4" in names or "x7-y7" in names:
+                avail[-1, :] = 1
+            else:
+                avail[0, :] = 1
+            return avail
+
+        self.mock_cluster.toBlockArray.side_effect = side_effect_helper2
+        decision, job_to_sched = self.sched.place(job, policy="reconfig", rsize=4)
+        # Available slices at inconsistent locations should lead to rejection.
+        self.assertEqual(decision, SchedDecision.REJECT)
+
         # Now try to schedule a 2x2 job in a 8x8 cluster with 8x8 reconfigurable block.
         # Only the bottom right corner is available.
         job.allocation = {}
@@ -442,8 +459,8 @@ class TestScheduling(unittest.TestCase):
         def side_effect_helper(*args):
             avail = np.ones((4, 4, 4))
             names = [node.name for node in args[0]]
+            # Only the x=0 plane is available.
             if "x7-y7-z7" in names:
-                # Only the x=0 plane is available.
                 avail[1:, :, :] = 0
             return avail
 
@@ -459,6 +476,23 @@ class TestScheduling(unittest.TestCase):
             for y in range(4, 8):
                 for z in range(4, 8):
                     self.assertNotIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+
+        job.shape = (8, 1, 4)
+        job.size = 32
+
+        def side_effect_helper2(*args):
+            avail = np.zeros((4, 4, 4))
+            names = [node.name for node in args[0]]
+            if "x0-y0-z0" in names:
+                avail[:, 0, :] = 1
+            elif "x4-y4-z4" in names:
+                avail[:, -1, :] = 1
+            return avail
+
+        self.mock_cluster.toBlockArray.side_effect = side_effect_helper2
+        decision, job_to_sched = self.sched.place(job, policy="reconfig", rsize=4)
+        # XZ places at y=0 and y=3 do not qualify. Should lead to rejection.
+        self.assertEqual(decision, SchedDecision.REJECT)
 
         # Now try to schedule a 2x2x2 job in a 8x8x8 cluster with 8x8x8 reconfigurable block.
         # Only the (7, 7, 7) corner is available.
