@@ -12,7 +12,7 @@ import numpy as np
 import scipy.stats as stats
 
 from common.flags import FLAGS
-from common.job import TopoType, Job, FormShape
+from common.job import TopoType, Job, FormShape, SplitShape
 from common.simpleUUID import SimpleUUID
 from common.utils import PrettyForm, factorize
 from Cluster.cluster import Cluster
@@ -35,7 +35,8 @@ def sample_job_size(target_size: int) -> int:
     sample = int(
         stats.truncexpon.rvs(b=(upper - lower) / scale, loc=lower, scale=scale, size=1)[0]
     )
-    job_size = sample if sample in (1, 2) else sample // 4 * 4
+    # job_size = sample if sample in (1, 2) else sample // 4 * 4
+    job_size = sample if sample in (1, 2) else int(math.ceil(sample / 4) * 4)
     return job_size
 
 
@@ -180,6 +181,76 @@ def main():
             dump_trace(jobs, os.path.join(FLAGS.stats_outdir, f"trace{i}.csv"))
 
 
+def read_trace(input_path: str) -> dict[str, list[Job]]:
+    if not os.path.isdir(input_path):
+        raise ValueError(f"{input_path} is not a valid directory")
+
+    jobs = {}
+    for file_name in os.listdir(input_path):
+        if not file_name.endswith(".csv"):
+            continue
+        file_path = os.path.join(input_path, file_name)
+        with open(file_path, mode="r") as file:
+            reader = csv.reader(file)
+            for row in reader:
+                if "#job id" in row[0]:
+                    continue
+                jobs.setdefault(file_name, []).append(
+                    Job(
+                        uuid=int(row[0]),
+                        arrival_time_sec=float(row[1]),
+                        topology=TopoType[row[2]],
+                        shape=SplitShape(row[3], TopoType[row[2]]),
+                        size=int(row[4]),
+                        duration_sec=float(row[5]),
+                    )
+                )
+    return jobs
+
+
+def replay(input_path: str):
+    job_map = read_trace(input_path)
+
+    cluster_util = []
+    for trace_name, jobs in job_map.items():
+        logging.info(f"Processing trace: {trace_name}")
+        env = simpy.Environment()
+        # Initialize the cluster.
+        logging.info(f"Product of FLAGS.dim: {math.prod(FLAGS.dim)}")
+        model = build_torus(name="c3", dimension=FLAGS.dim)
+        cluster = Cluster(env, spec=model)
+        # Initialize the scheduler.
+        sched = SchedulingPolicy(env, cluster)
+
+        logging.info("Simulation starts")
+        # Place the job.
+        for job in jobs:
+            decision, job_to_sched = sched.place(job)
+            if decision == SchedDecision.ADMIT:
+                # Update the resource usage.
+                cluster.execute(job_to_sched)
+            elif decision == SchedDecision.REJECT:
+                if job.size > cluster.totalIdleXPU():
+                    job.reject_reason = "resource"
+                else:
+                    job.reject_reason = "shape"
+        logging.info("Simulation completes")
+        logging.info("[Summary]")
+        logging.info(f"total jobs: {len(jobs)}, size: {sum([job.size for job in jobs])}")
+        logging.info(
+            f"cluster util: {math.prod(FLAGS.dim) - cluster.totalIdleXPU()} / {math.prod(FLAGS.dim)}"
+        )
+        cluster_util.append(
+            (math.prod(FLAGS.dim) - cluster.totalIdleXPU()) / math.prod(FLAGS.dim) * 100
+        )
+        logging.info("----[end]-----")
+    if FLAGS.stats_outdir:
+        with open(os.path.join(FLAGS.stats_outdir, "util.csv"), mode="w") as file:
+            writer = csv.writer(file)
+            for u in cluster_util:
+                writer.writerow([u])
+
+
 if __name__ == "__main__":
     # Set up logging.
     lvl = getattr(logging, FLAGS.log_level.upper(), None)
@@ -198,4 +269,6 @@ if __name__ == "__main__":
 
     # Simulation logic.
     random.seed(time.time())
-    main()
+    # main()
+    # Overriding the flag definition, in this script it is a directory.
+    replay(FLAGS.replay_trace)

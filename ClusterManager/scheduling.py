@@ -10,7 +10,7 @@ from typing import Optional, Generator
 
 from common.flags import FLAGS
 from common.job import Job, TopoType
-from common.utils import find_simple_path
+from common.utils import find_simple_path_helper
 from Cluster.cluster import Cluster
 from itertools import permutations, combinations
 
@@ -563,19 +563,14 @@ class SchedulingPolicy:
         Torus folding scheduling policy.
         """
 
-        def _is_1d_job(shape: tuple) -> bool:
+        def _real_job_dimension(shape: tuple) -> int:
             """
-            Check if the job is 1D.
-            Note: single node job is technically 1D but ignored since it cannot be folded.
+            Check if the job is 1D, 2D or 3D.
+            Note: single node job is technically 1D but we return a 0.
             """
-            return sum(dim != 1 for dim in shape) == 1
+            return sum(dim != 1 for dim in shape)
 
-        # TODO: generalize to other topologies.
-        if job.topology in (TopoType.CLOS,):
-            logging.debug(f"Job {job.uuid} rejected, unsupported topology.")
-            return SchedDecision.REJECT, job
-
-        if _is_1d_job(job.shape):
+        if _real_job_dimension(job.shape) == 1:
             logging.info(f"1D job, shape: {job.shape}")
             used_blocks_avail = {}
             empty_blocks_avail = {}
@@ -598,16 +593,18 @@ class SchedulingPolicy:
                         if node.numIdleXPU() > 0:
                             job.allocation[node.name] = 1
                 last_block = {**used_blocks_avail, **empty_blocks_avail}[block_coords[-1]]
-                for i in range(last_block.ndim):
-                    print(
-                        f"axis={i}, last block: {block_coords[-1]}, nodes need: {job.size - len(job.allocation)}, nodes avail: {np.sum(last_block)}, block avail:\n{last_block}"
+                for i in reversed(range(last_block.ndim)):
+                    logging.debug(
+                        f"last block: {block_coords[-1]}, axis={i}, nodes needed: "
+                        f"{job.size - len(job.allocation)}, nodes avail: {np.sum(last_block)}"
                     )
-                    path = find_simple_path(
+                    path = find_simple_path_helper(
                         block_coords[-1],
                         last_block,
                         job.size - len(job.allocation),
                         i,
                         rsize,
+                        10,
                     )
                     if path:
                         logging.debug(f"Found path: {path}")
@@ -617,6 +614,8 @@ class SchedulingPolicy:
                                 "-".join([f"{p}{c}" for p, c in zip(prefix, node_coord)])
                             ] = 1
                         return SchedDecision.ADMIT, job
+                    else:
+                        logging.info(f"[WARNING] No folded path found: job {job.uuid}")
                 # Reset the job allocation and fall back to normal scheduling.
                 job.allocation = {}
 

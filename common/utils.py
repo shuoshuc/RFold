@@ -6,6 +6,7 @@ import simpy
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from multiprocessing import Queue, Process
 from numpy.typing import NDArray
 from itertools import product
 from typing import Optional
@@ -341,7 +342,7 @@ def is_on_face(node_coord: tuple[int], axis: int, rsize: int) -> bool:
     return (node_coord[axis] == 0) or (node_coord[axis] == rsize - 1)
 
 
-def find_simple_path(
+def _find_simple_path(
     block_coord: tuple[int, ...], avail: NDArray, N: int, axis: int, rsize: int
 ) -> Optional[list[tuple]]:
     """
@@ -379,3 +380,49 @@ def find_simple_path(
                     return path_global_coords
 
     return None
+
+
+def find_simple_path(
+    out_q: Queue,
+    block_coord: tuple[int, ...],
+    avail: NDArray,
+    N: int,
+    axis: int,
+    rsize: int,
+) -> Optional[list[tuple]]:
+    path = _find_simple_path(
+        block_coord=block_coord,
+        avail=avail,
+        N=N,
+        axis=axis,
+        rsize=rsize,
+    )
+    out_q.put(path)
+
+
+def find_simple_path_helper(
+    block_coord: tuple[int, ...],
+    avail: NDArray,
+    N: int,
+    axis: int,
+    rsize: int,
+    timeout_sec: int,
+) -> Optional[list[tuple]]:
+    out_q = Queue()
+    child_process = Process(
+        target=find_simple_path,
+        args=(out_q, block_coord, avail, N, axis, rsize),
+        daemon=True,
+    )
+    child_process.start()
+    child_process.join(timeout=timeout_sec)
+
+    # After the timeout, check if the child process is still running
+    if child_process.is_alive():
+        child_process.kill()
+        child_process.join(timeout=1)
+
+    if not out_q.empty():
+        return out_q.get()
+    else:
+        return None
