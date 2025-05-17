@@ -12,7 +12,7 @@ from common.flags import FLAGS
 from common.job import Job, TopoType
 from common.utils import find_simple_path_helper
 from Cluster.cluster import Cluster
-from itertools import permutations, combinations
+from itertools import permutations, combinations, product
 
 
 class SchedDecision(Enum):
@@ -41,145 +41,6 @@ class SchedulingPolicy:
         """
         return random.choice([d for d in SchedDecision]), job
 
-    def _find_submesh(
-        self, array: NDArray[np.float64], a: int, b: int
-    ) -> Optional[tuple[int, int]]:
-        """
-        Finds a feasible AxB shaped submesh in the 2D mesh/torus.
-
-        Parameters:
-        array: 2D numpy array, where 0 means no XPU available.
-        a: job shape along dimension x
-        b: job shape along dimension y
-
-        Returns:
-        A tuple of (x, y) indicating the starting coordinates if a submesh is found.
-        Otherwise None.
-        """
-        if a > self.cluster.dimx or b > self.cluster.dimy:
-            logging.debug(f"Job shape ({a}, {b}) exceeds cluster dimension.")
-            return None
-
-        # The search range for torus should consider wrap-around.
-        if self.cluster.topo in (TopoType.T2D,):
-            xrange = self.cluster.dimx
-            yrange = self.cluster.dimy
-        else:
-            xrange = self.cluster.dimx - a + 1
-            yrange = self.cluster.dimy - b + 1
-        for x in range(xrange):
-            for y in range(yrange):
-                # Check if all nodes in the submesh have available XPUs.
-                if all(
-                    array[(x + i) % self.cluster.dimx][(y + j) % self.cluster.dimy] > 0
-                    for i in range(a)
-                    for j in range(b)
-                ):
-                    return x, y
-        return None
-
-    def _find_slice(
-        self, array: NDArray[np.float64], a: int, b: int, c: int
-    ) -> Optional[tuple[int, int, int]]:
-        """
-        Finds a feasible AxBxC shaped submesh in the 3D mesh/torus.
-
-        Parameters:
-        array: 3D numpy array, where 0 means no XPU available.
-        a: job shape along dimension x
-        b: job shape along dimension y
-        c: job shape along dimension z
-
-        Returns:
-        A tuple of (x, y, z) indicating the starting coordinates if a slice is found.
-        Otherwise None.
-        """
-        if a > self.cluster.dimx or b > self.cluster.dimy or c > self.cluster.dimz:
-            logging.debug(f"Job shape ({a}, {b}, {c}) exceeds cluster dimension.")
-            return None
-
-        # The search range for torus should consider wrap-around.
-        if self.cluster.topo in (TopoType.T3D_NT, TopoType.T3D_T):
-            xrange = self.cluster.dimx
-            yrange = self.cluster.dimy
-            zrange = self.cluster.dimz
-        else:
-            xrange = self.cluster.dimx - a + 1
-            yrange = self.cluster.dimy - b + 1
-            zrange = self.cluster.dimz - c + 1
-        for x in range(xrange):
-            for y in range(yrange):
-                for z in range(zrange):
-                    # Check if all nodes in the slice have available XPUs.
-                    if all(
-                        array[(x + i) % self.cluster.dimx][(y + j) % self.cluster.dimy][
-                            (z + k) % self.cluster.dimz
-                        ]
-                        > 0
-                        for i in range(a)
-                        for j in range(b)
-                        for k in range(c)
-                    ):
-                        return x, y, z
-        return None
-
-    def _fit_2d(
-        self, avail_array: NDArray[np.float64], job: Job
-    ) -> tuple[SchedDecision, Job]:
-        """
-        Fits a 2D job into the cluster.
-        Performs transposition if the original placement fails.
-        """
-        a, b = job.shape
-        loc = self._find_submesh(avail_array, a, b)
-        loc_t = self._find_submesh(avail_array, b, a)
-        if not loc and not loc_t:
-            logging.debug(f"Job {job.uuid} rejected, no feasible placement found.")
-            job.logRejectReason(self.env.now, "shape")
-            return SchedDecision.REJECT, job
-        # If the placement is after transposition, update the job shape.
-        base_x, base_y = loc if loc else loc_t
-        a, b = (a, b) if loc else (b, a)
-        job.shape = (a, b)
-        for i in range(base_x, base_x + a):
-            for j in range(base_y, base_y + b):
-                # Make sure to handle wrap-around indices for torus.
-                job.allocation[f"x{i % self.cluster.dimx}-y{j % self.cluster.dimy}"] = 1
-        return SchedDecision.ADMIT, job
-
-    def _fit_3d(
-        self, avail_array: NDArray[np.float64], job: Job
-    ) -> tuple[SchedDecision, Job]:
-        """
-        Fits a 3D job into the cluster.
-        Performs transposition if the original placement fails.
-        """
-        shapes = list(permutations(job.shape))
-        # A shape should have 6 permutations in 3D space. For now, they are treated as equivalent.
-        # But ideally, the best shape should be the one that generates least fragmentation.
-        # Need some form of evaluation to determine the best shape.
-        for a, b, c in shapes:
-            loc = self._find_slice(avail_array, a, b, c)
-            if not loc:
-                continue
-            base_x, base_y, base_z = loc
-            # Update the job shape since the placement could be after transposition.
-            job.shape = (a, b, c)
-            for i in range(base_x, base_x + a):
-                for j in range(base_y, base_y + b):
-                    for k in range(base_z, base_z + c):
-                        # Make sure to handle wrap-around indices for torus.
-                        job.allocation[
-                            f"x{i % self.cluster.dimx}-"
-                            f"y{j % self.cluster.dimy}-"
-                            f"z{k % self.cluster.dimz}"
-                        ] = 1
-            return SchedDecision.ADMIT, job
-
-        logging.debug(f"Job {job.uuid} rejected, no feasible placement found.")
-        job.logRejectReason(self.env.now, "shape")
-        return SchedDecision.REJECT, job
-
     def check_total_xpu(self, job: Job) -> bool:
         """
         Check if the total number of XPUs required by the job is available.
@@ -195,6 +56,57 @@ class SchedulingPolicy:
         req_node_cnt = len(job.shape) if job.topology == TopoType.CLOS else job.size
         return req_node_cnt <= self.cluster.totalIdleNodes()
 
+    def _find_submesh(
+        self, array: NDArray, shape: tuple[int, ...]
+    ) -> Optional[tuple[int, ...]]:
+        """
+        Finds a feasible submesh of `shape` in the 2D/3D mesh/torus.
+
+        Parameters:
+            array: numpy array, where 0 means no XPU available.
+            shape: job shape along each dimension (e.g., (a, b) or (a, b, c)).
+
+        Returns:
+            A tuple indicating the starting coordinates if a submesh is found.
+            Otherwise None.
+        """
+        ndim = array.ndim
+        if len(shape) != ndim:
+            logging.error(f"Job shape {len(shape)} mismatches array dimension {ndim}D.")
+            return None
+
+        cluster_dims = (self.cluster.dimx, self.cluster.dimy, self.cluster.dimz)[:ndim]
+        if any(s > c for s, c in zip(shape, cluster_dims)):
+            logging.debug(f"Job shape {shape} exceeds cluster dimension {cluster_dims}.")
+            return None
+
+        is_torus = False
+        if ndim == 2 and self.cluster.topo == TopoType.T2D:
+            is_torus = True
+        elif ndim == 3 and self.cluster.topo in (TopoType.T3D_NT, TopoType.T3D_T):
+            is_torus = True
+
+        # The search range for torus should consider wrap-around.
+        search_upper_bounds = [
+            cluster_dims[i] if is_torus else cluster_dims[i] - shape[i] + 1
+            for i in range(ndim)
+        ]
+        for start_coord in product(*[range(ub) for ub in search_upper_bounds]):
+            # If all nodes in the submesh have available XPUs, return the start position.
+            if all(
+                array[
+                    tuple(
+                        (start_coord[i] + offset[i]) % cluster_dims[i]
+                        for i in range(ndim)
+                    )
+                ]
+                > 0
+                for offset in product(*[range(s) for s in shape])
+            ):
+                return start_coord
+
+        return None
+
     def _firstfit(self, job: Job) -> tuple[SchedDecision, Job]:
         """
         First-fit scheduling policy.
@@ -204,10 +116,30 @@ class SchedulingPolicy:
             logging.debug(f"Job {job.uuid} rejected, unsupported topology.")
             return SchedDecision.REJECT, job
 
-        if job.topology in (TopoType.MESH2D, TopoType.T2D):
-            return self._fit_2d(self.cluster.toArray(), job)
-        elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
-            return self._fit_3d(self.cluster.toArray(), job)
+        dims = (
+            self.cluster.dimx,
+            self.cluster.dimy,
+            self.cluster.dimz,
+        )[: len(job.shape)]
+        prefix = ("x", "y", "z")[: len(job.shape)]
+
+        for shape in list(permutations(job.shape)):
+            loc = self._find_submesh(self.cluster.toArray(), shape)
+            if not loc:
+                continue
+            job.shape = shape
+            for coord in product(
+                *[range(base, base + offset) for base, offset in zip(loc, shape)]
+            ):
+                wrapped_coord = tuple((c % d) for c, d in zip(coord, dims))
+                job.allocation[
+                    "-".join([f"{p}{c}" for p, c in zip(prefix, wrapped_coord)])
+                ] = 1
+            return SchedDecision.ADMIT, job
+
+        logging.debug(f"Job {job.uuid} rejected, no feasible placement found.")
+        job.logRejectReason(self.env.now, "shape")
+        return SchedDecision.REJECT, job
 
     def _find_slices_loc_2d(
         self,
