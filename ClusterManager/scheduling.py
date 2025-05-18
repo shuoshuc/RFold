@@ -168,8 +168,10 @@ class SchedulingPolicy:
 
             nodes = self.cluster.blocks[block_coord]
             avail = self.cluster.toBlockArray(nodes)
-            slices = tuple(slice(loc[i], loc[i] + partial[i]) for i in range(ndim))
-            if np.all(avail[slices] > 0):
+            subarray = avail[
+                tuple(slice(loc[i], loc[i] + partial[i]) for i in range(ndim))
+            ]
+            if subarray.size > 0 and np.all(subarray > 0):
                 blocks_to_allocate.append(block_coord)
                 for local_coord in product(
                     *[range(l, l + p) for l, p in zip(loc, partial)]
@@ -290,7 +292,9 @@ class SchedulingPolicy:
         else:
             raise ValueError(f"Unsupported shape dimension: {len(shape)}D")
 
-    def _reconfig(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
+    def _reconfig(
+        self, job: Job, rsize: int, free_loc: bool = False
+    ) -> tuple[SchedDecision, Job]:
         """
         Reconfigurable scheduling policy.
         """
@@ -309,7 +313,17 @@ class SchedulingPolicy:
                     continue
 
                 # De-duplicate the locations.
-                for loc in set(self._reconfig_loc_helper(partial[counter_name], rsize)):
+                locations = set(self._reconfig_loc_helper(partial[counter_name], rsize))
+                # Extend the location list if OCS links are not required.
+                if free_loc and num_needed["full_block"] < 1:
+                    block_dim_sizes = (rsize, rsize, rsize)[: len(shape)]
+                    search_bounds = [
+                        s - p + 1 for s, p in zip(block_dim_sizes, partial[counter_name])
+                    ]
+                    locations = [
+                        loc for loc in product(*[range(ub) for ub in search_bounds])
+                    ]
+                for loc in locations:
                     blocks_to_alloc, nodes_to_alloc = self._find_slices_loc(
                         candidates=candidates,
                         blocks_needed=num_needed[counter_name],
@@ -445,10 +459,7 @@ class SchedulingPolicy:
                 # Reset the job allocation and fall back to normal scheduling.
                 job.allocation = {}
 
-        if job.topology in (TopoType.MESH2D, TopoType.T2D):
-            return self._reconfig_2d(job, rsize)
-        elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
-            return self._reconfig_3d(job, rsize)
+        return self._reconfig(job=job, rsize=rsize, free_loc=True)
 
     def _slurm_hilbert(self, job: Job) -> tuple[SchedDecision, Job]:
         """
