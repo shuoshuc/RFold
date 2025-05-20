@@ -4,15 +4,14 @@ import simpy
 import numpy as np
 from enum import Enum
 from hilbert import decode as hdecode
-from math import ceil, prod
 from numpy.typing import NDArray
 from typing import Optional, Generator
+from itertools import permutations, combinations, product
 
 from common.flags import FLAGS
 from common.job import Job, TopoType
-from common.utils import find_simple_path_helper
 from Cluster.cluster import Cluster
-from itertools import permutations, combinations, product
+from ClusterManager.torus import real_shape_dimension, find_simple_path_helper
 
 
 class SchedDecision(Enum):
@@ -402,16 +401,7 @@ class SchedulingPolicy:
         """
         Torus folding scheduling policy.
         """
-
-        def _real_job_dimension(shape: tuple) -> int:
-            """
-            Check if the job is 1D, 2D or 3D.
-            Note: single node job is technically 1D but we return a 0.
-            """
-            return sum(dim != 1 for dim in shape)
-
-        if _real_job_dimension(job.shape) == 1:
-            logging.info(f"1D job, shape: {job.shape}")
+        if real_shape_dimension(job.shape) == 1:
             used_blocks_avail = {}
             empty_blocks_avail = {}
             for coord, nodes in self.cluster.blocks.items():
