@@ -11,7 +11,11 @@ from itertools import permutations, combinations, product
 from common.flags import FLAGS
 from common.job import Job, TopoType
 from Cluster.cluster import Cluster
-from ClusterManager.torus import real_shape_dimension, find_simple_path_helper
+from ClusterManager.torus import (
+    real_shape_dimension,
+    find_simple_path_helper,
+    fold,
+)
 
 
 class SchedDecision(Enum):
@@ -448,6 +452,18 @@ class SchedulingPolicy:
                         logging.info(f"[WARNING] No folded path found: job {job.uuid}")
                 # Reset the job allocation and fall back to normal scheduling.
                 job.allocation = {}
+        else:
+            # Regular folding for 2D/3D jobs.
+            base_num_needed, _, _ = self._reconfig_param_map(job.shape, rsize)
+            folded_option_list = []
+            for folded_shape in fold(job.shape, rsize):
+                num_needed, _, _ = self._reconfig_param_map(folded_shape, rsize)
+                sum_blocks = sum(num_needed.values())
+                if sum_blocks > sum(base_num_needed.values()):
+                    continue
+                folded_option_list.append((folded_shape, sum_blocks))
+            if folded_option_list:
+                job.shape = sorted(folded_option_list, key=lambda x: x[1])[0][0]
 
         return self._reconfig(job=job, rsize=rsize, free_loc=True)
 

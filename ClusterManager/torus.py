@@ -198,16 +198,8 @@ def real_shape_dimension(shape: tuple[int, ...]) -> int:
 def folded_shape_helper(shape: tuple[int, ...]) -> set[tuple[int, ...]]:
     """
     Given a shape tuple, return all possible folded shapes.
+    Note that shape is either 2D or 3D.
     """
-
-    def exempted(n: int, num_factors: int) -> bool:
-        # Smallest N for a*b=N with a,b > 1 is 2*2=4
-        if num_factors == 2 and n < 4:
-            return True
-        # Smallest N for a*b*c=N with a,b,c > 1 is 2*2*2=8
-        if num_factors == 3 and n < 8:
-            return True
-        return False
 
     def factor_bound(i: int, num_factors: int) -> int:
         return i**2 if num_factors == 2 else i**3
@@ -218,9 +210,6 @@ def folded_shape_helper(shape: tuple[int, ...]) -> set[tuple[int, ...]]:
     # The original shape is always a feasible option.
     results = {tuple(sorted(shape))}
     n = prod(shape)
-    # No need to proceed for a very small n.
-    if exempted(n, num_factors):
-        return set()
 
     for a in divisors(n):
         # Check up to sqrt(n) / cbrt(n) to deduplicate pairs.
@@ -255,3 +244,37 @@ def are_homomorphic(orig: tuple[int, ...], target: tuple[int, ...], rsize: int) 
     isomatcher = nx.isomorphism.GraphMatcher(target_graph, orig_graph)
     # return isomatcher.subgraph_is_isomorphic()
     return isomatcher.subgraph_is_monomorphic()
+
+
+def are_homomorphic_fast(
+    orig: tuple[int, ...], target: tuple[int, ...], rsize: int
+) -> bool:
+    """
+    Checks if two shapes are homomorphic.
+    """
+    # Same-dimension folding has limited folding options. Only 2 folded to 4 in a 4x4x4
+    # block is valid. Other shapes are not able to use the wrap-around links.
+    if (real_shape_dimension(orig) == real_shape_dimension(target) == 3) or (
+        real_shape_dimension(orig) == real_shape_dimension(target) == 2
+    ):
+        return (rsize == 4) and (2 in orig) and (4 in target)
+    elif real_shape_dimension(orig) == 2 and real_shape_dimension(target) == 3:
+        return (2 in target) or (rsize == 4 and 4 in target)
+    return False
+
+
+def fold(orig_shape: tuple[int, ...], rsize: int) -> list[tuple[int, ...]]:
+    """
+    Return a list of homomorphic folded shapes given the original shape.
+    """
+    orig_shape_dim = real_shape_dimension(orig_shape)
+    folded_shapes = []
+    for folded_shape in folded_shape_helper(orig_shape):
+        folded_shape_dim = real_shape_dimension(folded_shape)
+        # Do not consider unfolding to lower dimension.
+        if folded_shape_dim < orig_shape_dim:
+            continue
+        if are_homomorphic_fast(orig_shape, folded_shape, rsize):
+            folded_shapes.append(folded_shape)
+
+    return folded_shapes
