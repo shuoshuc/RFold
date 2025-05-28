@@ -5,7 +5,6 @@ from typing import Tuple, Optional, Union, TypedDict
 
 from common.flags import FLAGS
 
-
 # Definition of type Allocation: it is a dict.
 Allocation = TypedDict("Allocation", {"node": str, "num_xpu": Union[int, float]})
 

@@ -203,7 +203,7 @@ def dump_job_stats(stats: dict, stats_output: str):
                 job.completion_time_sec,
                 job.size,
                 job.queueing_delay_sec,
-                job.completion_time_sec,
+                job.jct_sec,
                 job.wait_on_resource_sec,
                 job.wait_on_shape_sec,
                 job.slowdown,
