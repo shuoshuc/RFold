@@ -257,9 +257,45 @@ def are_homomorphic_fast(
     if (real_shape_dimension(orig) == real_shape_dimension(target) == 3) or (
         real_shape_dimension(orig) == real_shape_dimension(target) == 2
     ):
-        return (rsize == 4) and (2 in orig) and (4 in target)
+        original = sorted(list(orig))
+        for i in range(len(original)):
+            # Find one dimension that is foldable.
+            if original[i] != 2:
+                continue
+            remain = original[:i] + original[i + 1 :]
+            # One of the rest dimensions will be halved.
+            for j in range(len(remain)):
+                if remain[j] % 2:
+                    continue
+                # Check if the folded shape matches the target.
+                if sorted([4, remain[j] / 2] + remain[:j] + remain[j + 1 :]) == sorted(
+                    list(target)
+                ):
+                    return rsize == 4
+        return False
     elif real_shape_dimension(orig) == 2 and real_shape_dimension(target) == 3:
-        return (2 in target) or (rsize == 4 and 4 in target)
+        A, B = filter(lambda x: x != 1, orig)
+        # Any 2D shape folded once is always homomorphic to the original shape.
+        fold_once = [
+            foldable_shape
+            for foldable_shape in [
+                sorted([A // 2, B, 2]),
+                sorted([A, B // 2, 2]),
+            ]
+            if prod(foldable_shape) == prod(orig)
+        ]
+        # Any 2D shape folded twice is homomorphic to the original shape in 4x4x4 blocks
+        # with wrap-around links.
+        fold_twice = [
+            foldable_shape
+            for foldable_shape in [
+                sorted([A // 4, B, 4]),
+                sorted([A // 2, B // 2, 4]),
+                sorted([A, B // 4, 4]),
+            ]
+            if prod(foldable_shape) == prod(orig) and rsize == 4
+        ]
+        return sorted(list(target)) in fold_once + fold_twice
     return False
 
 
