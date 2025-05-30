@@ -122,6 +122,13 @@ class Flags:
             help=("Enable fractional XPU support if true."),
         )
         self.parser.add_argument(
+            "-clt",
+            "--closed_loop_threshold",
+            type=int,
+            default=0,
+            help=("New job queue threshold for closed-loop scheduling."),
+        )
+        self.parser.add_argument(
             "--log_level",
             type=str,
             default="INFO",
@@ -189,6 +196,10 @@ class Flags:
     @property
     def frac_xpu(self):
         return self.args.frac_xpu
+
+    @property
+    def closed_loop_threshold(self):
+        return self.args.closed_loop_threshold
 
     @property
     def log_level(self):

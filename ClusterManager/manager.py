@@ -45,12 +45,23 @@ class SortedList:
         """
         return self.slist.pop(0)
 
+    def __len__(self) -> int:
+        """
+        Returns the length of the list.
+        """
+        return len(self.slist)
+
     def __repr__(self) -> str:
         return f"SortedList({self.slist})"
 
 
 class ClusterManager:
-    def __init__(self, env: simpy.core.Environment, cluster: Cluster):
+    def __init__(
+        self,
+        env: simpy.core.Environment,
+        cluster: Cluster,
+        closed_loop_threshold: int = 0,
+    ):
         self.env = env
         # The cluster instance under management.
         self.cluster = cluster
@@ -82,12 +93,20 @@ class ClusterManager:
         # A list of cluster statistics, each tuple is
         # (time, utilization, # jobs running, # jobs queued).
         self.cluster_stats: list[tuple[int, float, int, int]] = []
+        # If set, new job queue will drop jobs exceeding this threshold.
+        self.closed_loop_threshold: int = closed_loop_threshold
 
     def submitJob(self, job: Job, wait_to_complete: bool):
         """
         Enqueue a job into the new job queue. If `wait_to_complete` is True, simulation
         only terminates after the job is completed.
         """
+        if len(self.new_job_queue) > self.closed_loop_threshold > 0:
+            logging.debug(
+                f"t = {self.env.now}, new job queue len {len(self.new_job_queue)}, "
+                f"dropping job: {job.short_print()}"
+            )
+            return
         self.new_job_queue.enqueue(job)
         logging.debug(f"t = {self.env.now}, enqueued: {job.short_print()}")
         if wait_to_complete:
@@ -188,7 +207,11 @@ class ClusterManager:
                     ) or not self.scheduler.check_total_node(queued_job):
                         queued_job.logRejectReason(self.env.now, "resource")
             elif decision == SchedDecision.REJECT:
-                pass
+                if len(self.running_job_queue) <= 0:
+                    raise RuntimeError(
+                        f"t = {self.env.now}, cluster is empty, but job is rejected: "
+                        f"{job_to_sched.short_print()}"
+                    )
             elif decision == SchedDecision.PREEMPT:
                 # TODO: replace with actual preemption
                 # Sleep for a short period to simulate job migration delay.
