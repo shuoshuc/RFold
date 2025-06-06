@@ -25,7 +25,7 @@ from common.utils import (
 from Cluster.cluster import Cluster
 from Cluster.model_builder import build, build_torus
 from ClusterManager.manager import ClusterManager
-from WorkloadGen.generator import WorkloadGenerator
+from WorkloadGen.generator import MixedWorkload
 from WorkloadGen.trace import TraceReplay
 
 
@@ -44,17 +44,21 @@ def main():
     # Initialize the cluster.
     cluster = Cluster(env, spec=model)
     # Initialize the cluster manager.
-    mgr = ClusterManager(env, cluster=cluster)
+    mgr = ClusterManager(
+        env, cluster=cluster, closed_loop_threshold=FLAGS.closed_loop_threshold
+    )
     # Spin up the workload generator. If a trace is provided, replay the trace.
     # Otherwise, generate a new workload.
     if FLAGS.replay_trace:
         workload = TraceReplay(env, tracefile=FLAGS.replay_trace, cluster_mgr=mgr)
     else:
-        workload = WorkloadGenerator(
+        workload = MixedWorkload(
             env,
+            cluster_mgr=mgr,
+            ndim=len(FLAGS.dim),
+            rsize=FLAGS.rsize,
             arrival_time_file=FLAGS.iat_file,
             job_size_file=FLAGS.job_size_file,
-            cluster_mgr=mgr,
             dur_trace=FLAGS.dur_trace_file,
         )
 

@@ -110,29 +110,36 @@ def viz3D(dimx: int, dimy: int, dimz: int, array: NDArray[np.float64]):
     plt.show()
 
 
-def factorize(n: int, dim: int) -> tuple[int, int, int]:
-    import sympy
+def factorize2(x):
+    """
+    Generates all (m, n) such that m * n = x.
+    """
+    pairs = set()
+    for m in range(2, int(np.sqrt(x)) + 1):
+        if x % m == 0:
+            n = x // m
+            pairs.add(tuple(sorted((m, n))))
+    return pairs
 
-    def _factorize(n):
-        factors = []
-        for p, e in sympy.factorint(n).items():
-            factors.extend([p] * e)
-        return factors
 
-    x = 1
-    y = 1
-    z = 1
-    options = ["x", "y", "z"]
-    for p in _factorize(n):
-        selection = str(np.random.choice(options[:dim]))
-        if selection == "x":
-            x *= p
-        elif selection == "y":
-            y *= p
-        else:
-            z *= p
+def factorize3(N):
+    """
+    Generates all (x, y, z) such that x * y * z = N.
+    """
+    triplets = set()
 
-    return sorted([x, y, z], reverse=True)
+    x = 2
+    while x**3 <= N:
+        if N % x == 0:
+            residual = N // x
+            # Start y from x to ensure x <= y
+            y = x
+            while y**2 <= residual:
+                if residual % y == 0:
+                    triplets.add((x, y, residual // y))
+                y += 1
+        x += 1
+    return triplets
 
 
 def extract_duration(csv_path):
