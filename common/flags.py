@@ -107,7 +107,7 @@ class Flags:
         self.parser.add_argument(
             "--job_size_file",
             type=str,
-            default=TPU_JOB_SIZES_DIST,
+            default="",
             help=("Job size/shape distribution file."),
         )
         self.parser.add_argument(

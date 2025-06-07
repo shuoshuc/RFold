@@ -166,15 +166,15 @@ class MixedWorkload:
         cluster_mgr: ClusterManager,
         ndim: int,
         rsize: int,
-        arrival_time_file: Union[str, StringIO],
-        job_size_file: Union[str, StringIO],
+        arrival_time_file: str,
+        job_size_file: str,
         dur_trace: str,
     ):
         self.env = env
         self.cluster_mgr = cluster_mgr
         self.ndim = ndim
         self.rsize = rsize
-        if not arrival_time_file or not job_size_file:
+        if not arrival_time_file or not dur_trace:
             raise RuntimeError("Distribution files are not provided")
         # Job inter-arrival time is modeled by `self.rv_iat`, in seconds.
         self.abs_time_sec = 0
@@ -185,26 +185,38 @@ class MixedWorkload:
 
         # Cache all the valid job shapes.
         self.shapes = {}
-        # Jobs of size 1, 2 are special.
-        self.shapes[1] = [[(1, 1, 1)], [], []]
-        self.shapes[2] = [[(2, 1, 1)], [], []]
-        for s in range(4, 2049, 4):
-            self.shapes[s] = [[], [], []]
-            if s <= 256:
-                # Valid to have 1D shape.
-                self.shapes[s][0] = [(s, 1, 1)]
-            for dim in [2, 3]:
-                self.shapes[s][dim - 1] = self.all_shapes_for_size(s, dim)
-            # If size `s` has no valid shapes, remove it from the dict.
-            if all(len(shape_list) <= 0 for shape_list in self.shapes[s]):
-                del self.shapes[s]
+        if not job_size_file:
+            # Jobs of size 1, 2 are special.
+            self.shapes[1] = [[(1, 1, 1)], [], []]
+            self.shapes[2] = [[(2, 1, 1)], [], []]
+            for s in range(4, 2049, 4):
+                self.shapes[s] = [[], [], []]
+                if s <= 256:
+                    # Valid to have 1D shape.
+                    self.shapes[s][0] = [(s, 1, 1)]
+                for dim in [2, 3]:
+                    self.shapes[s][dim - 1] = self.all_shapes_for_size(s, dim)
+                # If size `s` has no valid shapes, remove it from the dict.
+                if all(len(shape_list) <= 0 for shape_list in self.shapes[s]):
+                    del self.shapes[s]
+        else:
+            # TODO: A job size distribution is provided, so use it instead.
+            pass
+
+    def check_shape(self, shape: tuple[int, ...]) -> bool:
+        blocks_needed, _, _ = self.cluster_mgr.scheduler._reconfig_param_map(
+            shape, self.rsize
+        )
+        return sum(blocks_needed.values()) <= (
+            self.cluster_mgr.cluster.numNodes() // self.rsize**self.ndim
+        )
 
     def all_shapes_for_size(self, job_size: int, dim: int) -> list[tuple[int, ...]]:
         """
         For a given job size and dimension, generates all valid shapes.
         """
         if dim not in [2, 3]:
-            raise ValueError(f"_generate_shapes(): invalid dimension {dim}")
+            raise ValueError(f"generating shapes: invalid dimension {dim}")
 
         shapes = []
         limit = self.cluster_mgr.cluster.numNodes() // self.rsize**self.ndim * self.rsize
@@ -220,55 +232,51 @@ class MixedWorkload:
                 shapes.append(final_tup)
         return shapes
 
-    def sample_job_size(self) -> int:
+    def sample_job_size(self, exp_dist: bool) -> int:
         """
         Generates a random job size.
         """
-        # # scale is the inverse of the rate parameter.
-        # # Divide by 4 to ensure at least 2 dimensions are even.
-        # scale = target_size
-        # lower = 1
-        # upper = target_size
+        if exp_dist:
+            choices = sorted(self.shapes.keys())
+            skew = 4
+            dist = stats.truncexpon(b=skew, scale=len(choices) / skew)
+            idx = np.clip(dist.rvs(1).astype(int)[0], 0, len(choices) - 1)
+            return choices[idx]
 
-        # sample = int(
-        #     stats.truncexpon.rvs(
-        #         b=(upper - lower) / scale, loc=lower, scale=scale, size=1
-        #     )[0]
-        # )
-        # job_size = sample if sample in (1, 2) else int(math.ceil(sample / 4) * 4)
-        # return job_size
         return random.choice(list(self.shapes.keys()))
 
-    def check_shape(self, shape: tuple[int, ...]) -> bool:
-        blocks_needed, _, _ = self.cluster_mgr.scheduler._reconfig_param_map(
-            shape, self.rsize
-        )
-        return sum(blocks_needed.values()) <= (
-            self.cluster_mgr.cluster.numNodes() // self.rsize**self.ndim
-        )
-
-    # def generate_dimension(self, job_size: int) -> int:
-    #     """
-    #     Generates a dimension (1D/2D/3D) given a job size.
-    #     Hint: small jobs are more likely to be 1D, medium jobs are likely to be 2D,
-    #     large jobs are likely to be 3D.
-    #     """
-    #     if job_size <= 256:
-    #         return int(np.random.choice([1, 2]))
-    #     elif job_size <= 1024:
-    #         return int(np.random.choice([2, 3]))
-    #     else:
-    #         return int(np.random.choice([2, 3]))
-
-    def generate_shape(self, job_size: int) -> tuple[int, ...]:
-        # dim = self.generate_dimension(job_size)
+    def generate_shape(self, job_size: int, uniform_dist: bool) -> tuple[int, ...]:
+        """
+        Generates a shape for the given job size.
+        """
         idx_choices = []
         for i, shape_list in enumerate(self.shapes[job_size]):
             if len(shape_list) > 0:
                 idx_choices.append(i)
-        choice = int(np.random.choice(idx_choices))
-        shape_idx = random.randint(0, len(self.shapes[job_size][choice]) - 1)
-        return self.shapes[job_size][choice][shape_idx]
+
+        choice_of_dim = None
+        if uniform_dist:
+            # Uniform sampling.
+            choice_of_dim = int(np.random.choice(idx_choices))
+        else:
+            # Non-uniform sampling.
+            if job_size <= 256:
+                intersect = sorted(set(idx_choices) & set([0, 1]))
+                choice_of_dim = random.choices(
+                    intersect, weights=[[0.8, 0.2, 0][i] for i in intersect]
+                )[0]
+            elif job_size <= 1024:
+                intersect = sorted(set(idx_choices) & set([1, 2]))
+                choice_of_dim = random.choices(
+                    intersect, weights=[[0, 0.8, 0.2][i] for i in intersect]
+                )[0]
+            else:
+                intersect = sorted(set(idx_choices) & set([1, 2]))
+                choice_of_dim = random.choices(
+                    intersect, weights=[[0, 0.2, 0.8][i] for i in intersect]
+                )[0]
+        shape_idx = random.randint(0, len(self.shapes[job_size][choice_of_dim]) - 1)
+        return self.shapes[job_size][choice_of_dim][shape_idx]
 
     def _loadIATDist(self, filename: Union[str, StringIO]):
         """
@@ -305,8 +313,8 @@ class MixedWorkload:
         """
         while True:
             iat = float(round(self.rv_iat.rvs(size=1)[0]))
-            job_size = self.sample_job_size()
-            job_shape = self.generate_shape(job_size)
+            job_size = self.sample_job_size(exp_dist=True)
+            job_shape = self.generate_shape(job_size, uniform_dist=False)
             new_job = Job(
                 uuid=self.uuidgen.fetch(),
                 arrival_time_sec=self.abs_time_sec,

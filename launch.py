@@ -25,7 +25,7 @@ from common.utils import (
 from Cluster.cluster import Cluster
 from Cluster.model_builder import build, build_torus
 from ClusterManager.manager import ClusterManager
-from WorkloadGen.generator import MixedWorkload
+from WorkloadGen.generator import WorkloadGenerator, MixedWorkload
 from WorkloadGen.trace import TraceReplay
 
 
