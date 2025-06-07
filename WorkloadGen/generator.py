@@ -227,7 +227,6 @@ class MixedWorkload:
             if not all(j <= limit for j in tup):
                 continue
             final_tup = tup if len(tup) == 3 else (*tup, 1)
-            # TODO: handle 2D torus.
             if self.check_shape(final_tup):
                 shapes.append(final_tup)
         return shapes
@@ -251,7 +250,7 @@ class MixedWorkload:
         """
         idx_choices = []
         for i, shape_list in enumerate(self.shapes[job_size]):
-            if len(shape_list) > 0:
+            if len(shape_list) > 0 and i < self.ndim:
                 idx_choices.append(i)
 
         choice_of_dim = None
@@ -276,7 +275,7 @@ class MixedWorkload:
                     intersect, weights=[[0, 0.2, 0.8][i] for i in intersect]
                 )[0]
         shape_idx = random.randint(0, len(self.shapes[job_size][choice_of_dim]) - 1)
-        return self.shapes[job_size][choice_of_dim][shape_idx]
+        return self.shapes[job_size][choice_of_dim][shape_idx][: self.ndim]
 
     def _loadIATDist(self, filename: Union[str, StringIO]):
         """
