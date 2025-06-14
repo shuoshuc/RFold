@@ -558,7 +558,6 @@ def plot_folding_1d2d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         0,
@@ -570,7 +569,6 @@ def plot_folding_1d2d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         0.7,
@@ -582,7 +580,6 @@ def plot_folding_1d2d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         0,
@@ -594,7 +591,6 @@ def plot_folding_1d2d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
 
 
@@ -774,7 +770,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         3.5,
@@ -786,7 +781,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         3.5,
@@ -798,7 +792,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         0,
@@ -810,7 +803,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         0,
@@ -822,7 +814,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         0,
@@ -834,7 +825,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         0,
@@ -846,7 +836,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         0,
@@ -858,7 +847,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        fontweight="bold",
     )
     ax.text(
         -1,
@@ -870,7 +858,6 @@ def plot_folding_3d(ax):
         ha="center",
         va="center",
         fontsize=10,
-        # fontweight="bold",
     )
 
 
@@ -949,8 +936,8 @@ if __name__ == "__main__":
     fig.legend(
         handles=legend_elements,
         loc="upper left",
-        bbox_to_anchor=(0.03, 0.85),
-        fontsize=9,
+        bbox_to_anchor=(0.01, 0.87),
+        fontsize=9.5,
         ncol=5,
         columnspacing=0.9,
     )
@@ -961,7 +948,7 @@ if __name__ == "__main__":
 
     # Now crop the PDF.
     # 1 inch = 72 points in PDF coordinate system
-    inches_from_top = 0.35
+    inches_from_top = 0.28
     inches_from_bottom = 0.75
 
     reader = PdfReader(plot_file_name)
