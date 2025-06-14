@@ -277,7 +277,19 @@ def draw_split_cuboid_3d(
             if split_info and split_info["axis"] == "y" and hy >= split_info["index"]:
                 plot_y_highlight += gap_size
             # Draw the single, correctly-colored circle.
-            ax.scatter(hx, plot_y_highlight, hz, c=color, s=100, alpha=1.0, zorder=1)
+            ec = None
+            if (hx, hy, hz) in [(0, 0, 0), (0, 7, 3)]:
+                ec = "turquoise"
+            ax.scatter(
+                hx,
+                plot_y_highlight,
+                hz,
+                ec=ec,
+                c=color,
+                s=100,
+                alpha=1.0,
+                zorder=1,
+            )
 
     # --- 4. Connect All Nodes Using Lines ---
     def check_visible_surface(pi, pj, pk):
