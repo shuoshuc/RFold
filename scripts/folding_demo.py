@@ -852,7 +852,7 @@ def plot_folding_3d(ax):
         -1,
         6.0,
         -0.4,
-        "4x4x4\nTPU nodes (cube)",
+        "4x4x4\nXPU nodes (cube)",
         color="dimgray",
         zorder=25,
         ha="center",
