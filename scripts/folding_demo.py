@@ -372,11 +372,6 @@ def draw_split_cuboid_3d(
                             and sorted([coord1, coord2]) not in non_highlighted_edges
                         ):
                             line_color = highlighted_nodes[coord1]
-                            if sorted([coord1, coord2]) in [
-                                sorted([(0, 1, 1), (0, 1, 2)]),
-                                sorted([(0, 2, 1), (0, 2, 2)]),
-                            ]:
-                                line_color = DEFAULT_COLOR
                             line_width = 2
                             z_ord = 15
                         else:
@@ -497,6 +492,7 @@ def plot_folding_1d2d(ax):
         sorted([(1, 1, 3), (2, 1, 3)]),
         sorted([(1, 2, 3), (2, 2, 3)]),
         sorted([(2, 5, 3), (3, 5, 3)]),
+        sorted([(0, 0, 1), (0, 1, 1)]),
     ]
 
     draw_split_cuboid(
@@ -624,6 +620,8 @@ def plot_folding_3d(ax):
     # Non-highlighted edges to avoid double lines
     non_highlighted_edges = [
         # sorted([(1, 0, 3), (1, 1, 3)]),
+        sorted([(0, 1, 1), (0, 1, 2)]),
+        sorted([(0, 2, 1), (0, 2, 2)]),
     ]
 
     draw_split_cuboid_3d(
