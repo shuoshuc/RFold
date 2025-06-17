@@ -26,7 +26,7 @@ def run_process(i, tot, cmd):
     )
 
 
-def main(trace_folder: str):
+def sweep(trace_folder: str):
     # Only import flags in the function scope. common.flags imports argparse, which
     # messes with sys.argv when loaded. Hence, delay importing until args are consumed.
     from common.flags import (
@@ -38,8 +38,8 @@ def main(trace_folder: str):
     )
 
     # All the parameters to sweep over.
-    sim_duration = [50 * 3600, 100 * 3600]
-    dimensions = ["16,16,16", "24,24,24", "32,32,32"]
+    sim_duration = [10000 * 3600]
+    dimensions = ["16,16,16"]
     if trace_folder:
         # Include all csv files in the trace folder.
         trace = [
@@ -49,9 +49,9 @@ def main(trace_folder: str):
             if file.endswith(".csv")
         ]
     else:
-        trace = [PHILLY_TRACE, ALIBABA_TRACE, HELIOS_TRACE, ACME_TRACE]
-    iat = [IAT_DIST]
-    place_policy = ["firstfit", "slurm_hilbert"]
+        trace = [PHILLY_TRACE]
+    iat = ["WorkloadGen/data/iat_csv/iat5.csv"]
+    place_policy = ["reconfig"]
 
     start_time = time.time()
     configs = list(product(sim_duration, dimensions, trace, iat, place_policy))
@@ -60,7 +60,7 @@ def main(trace_folder: str):
         sim_dur, dim, trace_file, iat_file, policy = args
         cmd = (
             f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
-            f"--log_level WARNING "
+            f"--rsize 4 -clt 10 "
         )
         if trace_folder:
             cmd += f"-r {trace_file} "
@@ -88,4 +88,4 @@ if __name__ == "__main__":
         trace_folder = sys.argv[1]
         # Drop the command line arguments to avoid argparse error.
         sys.argv = sys.argv[:1]
-    main(trace_folder)
+    sweep(trace_folder)
