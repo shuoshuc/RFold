@@ -26,7 +26,20 @@ def run_process(i, tot, cmd):
     )
 
 
-def sweep(trace_folder: str):
+def replay_helper(i, cmd):
+    start = time.time()
+    result = subprocess.run(cmd, shell=True)
+    end = time.time()
+
+    if result.returncode != 0:
+        print(f"[ERROR] run{i} failed with return code {result.returncode}", flush=True)
+    print(
+        f"run {i} took {round((end - start) / 60, 0)} min: {cmd}",
+        flush=True,
+    )
+
+
+def sweep():
     # Only import flags in the function scope. common.flags imports argparse, which
     # messes with sys.argv when loaded. Hence, delay importing until args are consumed.
     from common.flags import (
@@ -34,22 +47,12 @@ def sweep(trace_folder: str):
         ALIBABA_TRACE,
         HELIOS_TRACE,
         ACME_TRACE,
-        IAT_DIST,
     )
 
     # All the parameters to sweep over.
     sim_duration = [10000 * 3600]
     dimensions = ["16,16,16"]
-    if trace_folder:
-        # Include all csv files in the trace folder.
-        trace = [
-            os.path.join(root, file)
-            for root, _, files in os.walk(trace_folder)
-            for file in files
-            if file.endswith(".csv")
-        ]
-    else:
-        trace = [PHILLY_TRACE]
+    trace = [PHILLY_TRACE]
     iat = ["WorkloadGen/data/iat_csv/iat5.csv"]
     place_policy = ["reconfig"]
 
@@ -60,12 +63,8 @@ def sweep(trace_folder: str):
         sim_dur, dim, trace_file, iat_file, policy = args
         cmd = (
             f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
-            f"--rsize 4 -clt 10 "
+            f"--rsize 4 -clt 10 --dur_trace_file {trace_file} --iat_file {iat_file} "
         )
-        if trace_folder:
-            cmd += f"-r {trace_file} "
-        else:
-            cmd += f"--dur_trace_file {trace_file} --iat_file {iat_file} "
         cmds.append(cmd)
 
     # Reserve 2 cores for the system to remain responsive.
@@ -73,6 +72,36 @@ def sweep(trace_folder: str):
         pool.starmap(
             run_process, [(i + 1, len(configs), cmd) for i, cmd in enumerate(cmds)]
         )
+    end_time = time.time()
+    print(f"Total execution time: {round((end_time - start_time) / 60, 0)} min")
+
+
+def replay(trace_folder: str):
+    sim_duration = [5000 * 3600]
+    dimensions = ["16,16,16"]
+    place_policy = ["reconfig"]
+    trace_paths = [
+        os.path.join(trace_folder, subfolder) for subfolder in os.listdir(trace_folder)
+    ]
+
+    start_time = time.time()
+    configs = list(product(sim_duration, dimensions, trace_paths, place_policy))
+    cmds = []
+    for args in configs:
+        sim_dur, dim, trace_path, policy = args
+        trace = os.path.join(trace_path, "trace.csv")
+        output = os.path.join(trace_path, policy)
+        if not os.path.exists(output):
+            os.makedirs(output)
+        cmd = (
+            f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
+            f"--rsize 4 -clt 10 -r {trace} --stats_outdir {output}"
+        )
+        cmds.append(cmd)
+
+    # Reserve 2 cores for the system to remain responsive.
+    with mp.Pool(processes=mp.cpu_count() - 2) as pool:
+        pool.starmap(replay_helper, [(i + 1, cmd) for i, cmd in enumerate(cmds)])
     end_time = time.time()
     print(f"Total execution time: {round((end_time - start_time) / 60, 0)} min")
 
@@ -88,4 +117,7 @@ if __name__ == "__main__":
         trace_folder = sys.argv[1]
         # Drop the command line arguments to avoid argparse error.
         sys.argv = sys.argv[:1]
-    sweep(trace_folder)
+    if not trace_folder:
+        sweep()
+    else:
+        replay(trace_folder)
