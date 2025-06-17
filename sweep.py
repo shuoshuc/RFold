@@ -95,7 +95,7 @@ def replay(trace_folder: str):
             os.makedirs(output)
         cmd = (
             f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
-            f"--rsize 4 -clt 10 -r {trace} --stats_outdir {output}"
+            f"--rsize 4 -r {trace} --stats_outdir {output}"
         )
         cmds.append(cmd)
 
