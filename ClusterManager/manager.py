@@ -207,6 +207,16 @@ class ClusterManager:
                     ) or not self.scheduler.check_total_node(queued_job):
                         queued_job.logRejectReason(self.env.now, "resource")
             elif decision == SchedDecision.REJECT:
+                if FLAGS.place_policy == "firstfit" and any(
+                    sz > min(FLAGS.dim) for sz in job.shape
+                ):
+                    self.new_job_queue.remove(job)
+                    job.slowdown = float("inf")
+                    self.job_stats[job.uuid] = job
+                    logging.info(
+                        f"t = {self.env.now}, job shape exceeds torus dimension, skipping job {job.short_print()}"
+                    )
+                    continue
                 if len(self.running_job_queue) <= 0:
                     raise RuntimeError(
                         f"t = {self.env.now}, cluster is empty, but job is rejected: "
