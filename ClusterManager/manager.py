@@ -207,10 +207,16 @@ class ClusterManager:
                     ) or not self.scheduler.check_total_node(queued_job):
                         queued_job.logRejectReason(self.env.now, "resource")
             elif decision == SchedDecision.REJECT:
+                # We need to filter the infeasible shapes for static torus in order to
+                # get firstfit to run.
                 if FLAGS.place_policy == "firstfit" and any(
                     sz > min(FLAGS.dim) for sz in job.shape
                 ):
                     self.new_job_queue.remove(job)
+                    if job.uuid in self.jobs_to_watch:
+                        self.jobs_to_watch.remove(job.uuid)
+                    job.queueing_delay_sec = float("inf")
+                    job.jct_sec = float("inf")
                     job.slowdown = float("inf")
                     self.job_stats[job.uuid] = job
                     logging.info(
