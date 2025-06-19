@@ -401,7 +401,7 @@ class SchedulingPolicy:
         # If we reach here, it means we have not found enough blocks.
         return []
 
-    def _folding(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
+    def _rfold(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
         """
         Torus folding scheduling policy.
         """
@@ -540,8 +540,10 @@ class SchedulingPolicy:
             return self._firstfit(job)
         elif policy == "reconfig":
             return self._reconfig(job, rsize)
+        elif policy == "rfold":
+            return self._rfold(job, rsize)
         elif policy == "folding":
-            return self._folding(job, rsize)
+            pass
         elif policy == "slurm_hilbert":
             return self._slurm_hilbert(job)
         # The default fallback is to reject all jobs.

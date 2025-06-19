@@ -47,7 +47,7 @@ class Flags:
             default="firstfit",
             help=(
                 "Job placement policy to use. Available options: "
-                "firstfit, slurm_hilbert, reconfig, folding."
+                "firstfit, slurm_hilbert, reconfig, rfold, folding."
             ),
         )
         self.parser.add_argument(
