@@ -14,7 +14,9 @@ from Cluster.cluster import Cluster
 from ClusterManager.torus import (
     real_shape_dimension,
     find_simple_path_helper,
+    find_1D_cycle_helper,
     fold,
+    folded_shape_helper,
 )
 
 
@@ -403,7 +405,7 @@ class SchedulingPolicy:
 
     def _rfold(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
         """
-        Torus folding scheduling policy.
+        RFold scheduling policy.
         """
         if real_shape_dimension(job.shape) == 1:
             used_blocks_avail = {}
@@ -466,6 +468,44 @@ class SchedulingPolicy:
                 job.shape = sorted(folded_option_list, key=lambda x: x[1])[0][0]
 
         return self._reconfig(job=job, rsize=rsize, free_loc=True)
+
+    def _foldonly(self, job: Job, rsize: int) -> tuple[SchedDecision, Job]:
+        """
+        Folding-only scheduling policy.
+        """
+
+        def fold_func(job_shape: tuple[int, ...], rsize: int) -> list[tuple[int, ...]]:
+            if real_shape_dimension(job.shape) == 1:
+                return folded_shape_helper(job_shape)
+            else:
+                return fold(job_shape, rsize)
+
+        folded_option_list = []
+        for folded_shape in fold_func(job.shape, rsize):
+            # Only feasible folded shapes are useful.
+            if any(sz > rsize for sz in folded_shape):
+                continue
+            folded_option_list.append(folded_shape)
+        if folded_option_list:
+            # Pick the shape with smallest maximum dimension size.
+            # This indiates it is closer to a square/cube shape.
+            job.shape = sorted(folded_option_list, key=lambda x: max(x))[0]
+
+        # # Optional: find 1D cycle for 1D jobs.
+        # if real_shape_dimension(job.shape) == 1 and job.size >= 4:
+        #     avail = self.cluster.toArray()
+        #     cycle = find_1D_cycle_helper(avail, job.size, 10)
+        #     if cycle:
+        #         for node_coord in cycle:
+        #             prefix = ("x", "y", "z")[: len(node_coord)]
+        #             job.allocation[
+        #                 "-".join([f"{p}{c}" for p, c in zip(prefix, node_coord)])
+        #             ] = 1
+        #         return SchedDecision.ADMIT, job
+        #     else:
+        #         logging.info(f"[WARNING] No folded path found: job {job.uuid}")
+
+        return self._firstfit(job=job)
 
     def _slurm_hilbert(self, job: Job) -> tuple[SchedDecision, Job]:
         """
@@ -543,7 +583,7 @@ class SchedulingPolicy:
         elif policy == "rfold":
             return self._rfold(job, rsize)
         elif policy == "folding":
-            pass
+            return self._foldonly(job, rsize)
         elif policy == "slurm_hilbert":
             return self._slurm_hilbert(job)
         # The default fallback is to reject all jobs.

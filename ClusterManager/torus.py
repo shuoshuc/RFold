@@ -53,7 +53,7 @@ def normalize_cycle(cycle: list[tuple]) -> tuple[tuple]:
     return min(cycle_variants)
 
 
-def find_1D_cycle(avail: NDArray, n: int) -> Optional[list[tuple]]:
+def _find_1D_cycle(avail: NDArray, n: int) -> Optional[list[tuple]]:
     """
     Finds one simple cycle of a specific length N in a graph derived from
     an availability array (2D or 3D torus).
@@ -82,6 +82,40 @@ def find_1D_cycle(avail: NDArray, n: int) -> Optional[list[tuple]]:
             return list(cycle)
 
     return None
+
+
+def find_1D_cycle(
+    out_q: Queue,
+    avail: NDArray,
+    N: int,
+) -> Optional[list[tuple]]:
+    cycle = _find_1D_cycle(avail=avail, n=N)
+    out_q.put(cycle)
+
+
+def find_1D_cycle_helper(
+    avail: NDArray,
+    N: int,
+    timeout_sec: int,
+) -> Optional[list[tuple]]:
+    out_q = Queue()
+    child_process = Process(
+        target=find_1D_cycle,
+        args=(out_q, avail, N),
+        daemon=True,
+    )
+    child_process.start()
+    child_process.join(timeout=timeout_sec)
+
+    # After the timeout, check if the child process is still running
+    if child_process.is_alive():
+        child_process.kill()
+        child_process.join(timeout=1)
+
+    if not out_q.empty():
+        return out_q.get()
+    else:
+        return None
 
 
 def is_on_face(node_coord: tuple[int], axis: int, rsize: int) -> bool:

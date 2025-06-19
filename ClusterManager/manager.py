@@ -209,7 +209,7 @@ class ClusterManager:
             elif decision == SchedDecision.REJECT:
                 # We need to filter the infeasible shapes for static torus in order to
                 # get firstfit to run.
-                if FLAGS.place_policy == "firstfit" and any(
+                if FLAGS.place_policy in ["firstfit", "folding"] and any(
                     sz > min(FLAGS.dim) for sz in job.shape
                 ):
                     self.new_job_queue.remove(job)
