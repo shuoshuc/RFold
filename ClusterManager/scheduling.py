@@ -583,7 +583,7 @@ class SchedulingPolicy:
         elif policy == "rfold":
             return self._rfold(job, rsize)
         elif policy == "folding":
-            return self._foldonly(job, rsize)
+            return self._foldonly(job, min(FLAGS.dim))
         elif policy == "slurm_hilbert":
             return self._slurm_hilbert(job)
         # The default fallback is to reject all jobs.

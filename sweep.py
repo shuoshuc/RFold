@@ -80,22 +80,23 @@ def replay(trace_folder: str):
     sim_duration = [5000 * 3600]
     dimensions = ["16,16,16"]
     place_policy = ["reconfig"]
+    rsize = [4]
     trace_paths = [
         os.path.join(trace_folder, subfolder) for subfolder in os.listdir(trace_folder)
     ]
 
     start_time = time.time()
-    configs = list(product(sim_duration, dimensions, trace_paths, place_policy))
+    configs = list(product(sim_duration, dimensions, trace_paths, place_policy, rsize))
     cmds = []
     for args in configs:
-        sim_dur, dim, trace_path, policy = args
+        sim_dur, dim, trace_path, policy, rsize = args
         trace = os.path.join(trace_path, "trace.csv")
         output = os.path.join(trace_path, policy)
         if not os.path.exists(output):
             os.makedirs(output)
         cmd = (
             f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
-            f"--rsize 4 -r {trace} --stats_outdir {output}"
+            f"--rsize {rsize} -r {trace} --stats_outdir {output}"
         )
         cmds.append(cmd)
 
