@@ -20,7 +20,9 @@ class Arrow3D(FancyArrowPatch):
         return np.min(zs)
 
 
+FONTSIZE = 9
 DEFAULT_COLOR = "silver"
+CUBE_ASPECT = lambda x, y, z, gap_size: (x - 1 + 0.5, (y - 1) + gap_size, z - 1 - 0.3)
 
 
 def draw_split_cuboid(
@@ -198,7 +200,7 @@ def draw_split_cuboid(
 
     # --- 5. Clean up the view ---
     ax.axis("off")
-    ax.set_box_aspect((Nx - 1, (Ny - 1) + gap_size, Nz - 1), zoom=0.9)
+    ax.set_box_aspect(CUBE_ASPECT(Nx, Ny, Nz, gap_size), zoom=0.9)
     ax.view_init(elev=23, azim=-155)
 
 
@@ -389,7 +391,7 @@ def draw_split_cuboid_3d(
 
     # --- 5. Clean up the view ---
     ax.axis("off")
-    ax.set_box_aspect((Nx - 1, (Ny - 1) + gap_size, Nz - 1), zoom=0.9)
+    ax.set_box_aspect(CUBE_ASPECT(Nx, Ny, Nz, gap_size), zoom=0.9)
     ax.view_init(elev=23, azim=-155)
 
 
@@ -509,7 +511,7 @@ def plot_folding_1d2d(ax):
     draw_elliptical_arrow_3d(
         ax,
         center=(0.5, 0.9),  # (y, z) center of the ellipse
-        radius_a=0.23,  # Radius in the y-direction
+        radius_a=0.22,  # Radius in the y-direction
         radius_b=0.7,  # Radius in the z-direction
         start_angle=120,
         end_angle=380,
@@ -524,7 +526,7 @@ def plot_folding_1d2d(ax):
         Arrow3D(
             [0, 0],
             [6.5, 3],
-            [-0.4, -0.4],
+            [-0.5, -0.5],
             arrowstyle="->",
             color="black",
             lw=1.5,
@@ -547,7 +549,7 @@ def plot_folding_1d2d(ax):
     ax.add_artist(
         Arrow3D(
             [0, 2.5],
-            [-0.5, -0.5],
+            [-0.6, -0.6],
             [0, 0],
             arrowstyle="->",
             color="black",
@@ -565,7 +567,7 @@ def plot_folding_1d2d(ax):
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         0,
@@ -576,18 +578,18 @@ def plot_folding_1d2d(ax):
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
-        0.7,
-        -0.9,
+        0.8,
+        -1.0,
         0,
         "X",
         color="black",
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         0,
@@ -598,7 +600,7 @@ def plot_folding_1d2d(ax):
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
 
 
@@ -673,7 +675,7 @@ def plot_folding_3d(ax):
     ax.add_artist(
         Arrow3D(
             [0, 2.5],
-            [-0.5, -0.5],
+            [-0.6, -0.6],
             [0, 0],
             arrowstyle="->",
             color="black",
@@ -681,34 +683,36 @@ def plot_folding_3d(ax):
             mutation_scale=10,
         )
     )
-    # y-axis arrow
+    # y-axis arrow (Y1)
     ax.add_artist(
         Arrow3D(
             [0, 0],
             [7, 4.5],
-            [2.7, 2.7],
+            [2.65, 2.65],
             arrowstyle="->",
             color="black",
             lw=1.5,
             mutation_scale=10,
         )
     )
+    # y-axis arrow (Y2)
     ax.add_artist(
         Arrow3D(
             [0, 0],
             [7, 4.5],
-            [1.7, 1.7],
+            [1.65, 1.65],
             arrowstyle="->",
             color="black",
             lw=1.5,
             mutation_scale=10,
         )
     )
+    # y-axis arrow (Y1')
     ax.add_artist(
         Arrow3D(
             [0, 0],
             [2.8, 0.5],
-            [2.7, 2.7],
+            [2.65, 2.65],
             arrowstyle="->",
             color="black",
             lw=1.5,
@@ -719,7 +723,7 @@ def plot_folding_3d(ax):
         Arrow3D(
             [0, 0],
             [0.7, 2.8],
-            [0.3, 0.3],
+            [0.35, 0.35],
             arrowstyle="->",
             color="black",
             lw=1.5,
@@ -730,7 +734,7 @@ def plot_folding_3d(ax):
         ax,
         center=(1.5, 1.45),  # (y, z) center of the ellipse
         radius_a=1.3,  # Radius in the y-direction
-        radius_b=0.25,  # Radius in the z-direction
+        radius_b=0.2,  # Radius in the z-direction
         start_angle=115,
         end_angle=415,
         plane="yz",  # Draw in a plane parallel to the YZ plane
@@ -771,70 +775,70 @@ def plot_folding_3d(ax):
     )
 
     ax.text(
-        0.9,
-        -0.9,
+        0.8,
+        -1.0,
         0,
         "X",
         color="black",
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         3.5,
-        -0.5,
+        -0.55,
         0.3,
         "Z",
         color="black",
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         3.5,
-        -0.5,
+        -0.55,
         2.3,
         "Z",
         color="black",
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         0,
-        8.85,
+        8.9,
         2.3,
         "Z",
         color="black",
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         0,
         5.6,
-        2.4,
+        2.3,
         "Y1",
         color="black",
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         0,
         5.6,
-        1.4,
+        1.3,
         "Y2",
         color="black",
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         0,
@@ -845,7 +849,7 @@ def plot_folding_3d(ax):
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
         0,
@@ -856,27 +860,27 @@ def plot_folding_3d(ax):
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
     ax.text(
-        -1,
+        -1.1,
         6.0,
-        -0.4,
-        "4x4x4\nXPU nodes (cube)",
+        -0.5,
+        "4x4x4 XPUs\n(cube)",
         color="dimgray",
         zorder=25,
         ha="center",
         va="center",
-        fontsize=10,
+        fontsize=FONTSIZE,
     )
 
 
 if __name__ == "__main__":
     # Set the style for the plots
-    plt.rcParams["font.size"] = 10
+    plt.rcParams["font.size"] = FONTSIZE
     latex_line_width = 7
     fig = plt.figure(
-        figsize=(latex_line_width, latex_line_width * 0.6), constrained_layout=True
+        figsize=(latex_line_width, latex_line_width * 0.55), constrained_layout=True
     )
     ax1 = fig.add_subplot(121, projection="3d")
     plot_folding_1d2d(ax1)
@@ -946,8 +950,8 @@ if __name__ == "__main__":
     fig.legend(
         handles=legend_elements,
         loc="upper left",
-        bbox_to_anchor=(0.01, 0.87),
-        fontsize=9.5,
+        bbox_to_anchor=(0.035, 0.88),
+        fontsize=FONTSIZE,
         ncol=5,
         columnspacing=0.9,
     )
@@ -958,8 +962,8 @@ if __name__ == "__main__":
 
     # Now crop the PDF.
     # 1 inch = 72 points in PDF coordinate system
-    inches_from_top = 0.28
-    inches_from_bottom = 0.75
+    inches_from_top = 0.39
+    inches_from_bottom = 0.8
 
     reader = PdfReader(plot_file_name)
     writer = PdfWriter()
