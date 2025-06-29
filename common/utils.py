@@ -5,6 +5,7 @@ import simpy
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
+from typing import Type
 
 from common.job import FormShape
 
@@ -251,7 +252,7 @@ def dump_cluster_stats(stats: list[tuple], stats_output: str):
         writer.writerows(out)
 
 
-def failure_sampling(cluster: "Cluster", M: int) -> list[str]:
+def failure_sampling(cluster: Type[object], M: int) -> list[str]:
     """
     Sample M nodes to fail from the cluster.
     """
