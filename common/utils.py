@@ -249,3 +249,17 @@ def dump_cluster_stats(stats: list[tuple], stats_output: str):
         writer = csv.writer(file)
         writer.writerow(["#time (sec)", "util", "jobs queued", "jobs running"])
         writer.writerows(out)
+
+
+def failure_sampling(cluster: "Cluster", M: int) -> list[str]:
+    """
+    Sample M nodes to fail from the cluster.
+    """
+    all_nodes = list(cluster.nodes.keys())
+    if M > len(all_nodes):
+        raise ValueError(
+            f"Requested {M} nodes to fail, but only {len(all_nodes)} nodes available."
+        )
+
+    indices = np.random.choice(len(all_nodes), M, replace=False)
+    return [all_nodes[i] for i in indices]

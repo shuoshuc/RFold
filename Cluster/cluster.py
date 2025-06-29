@@ -250,6 +250,16 @@ class Cluster:
 
         return np.array(sorted(array))
 
+    def failNodes(self, node_names: list[str]):
+        """
+        Fail the nodes in the cluster by setting their availability to 0.
+        """
+        for node_name in node_names:
+            if node_name not in self.nodes:
+                logging.warning(f"Failed node {node_name} not found in the cluster.")
+                continue
+            self.nodes[node_name].num_idle_xpu = 0
+
     def visualize(self):
         """
         Visualize the cluster state.

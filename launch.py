@@ -43,6 +43,12 @@ def main():
 
     # Initialize the cluster.
     cluster = Cluster(env, spec=model)
+    # If a failure config is provided, read it and fail the nodes accordingly.
+    if FLAGS.failure_config:
+        with open(FLAGS.failure_config, "r") as f:
+            failed_nodes = [line.strip() for line in f]
+        logging.debug(f"Failing nodes: {failed_nodes}")
+        cluster.failNodes(failed_nodes)
     # Initialize the cluster manager.
     mgr = ClusterManager(
         env, cluster=cluster, closed_loop_threshold=FLAGS.closed_loop_threshold

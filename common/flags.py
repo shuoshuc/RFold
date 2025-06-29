@@ -92,6 +92,12 @@ class Flags:
             help=("Path to the cluster spec file."),
         )
         self.parser.add_argument(
+            "--failure_config",
+            type=str,
+            default="",
+            help=("Path to the config file of failed nodes."),
+        )
+        self.parser.add_argument(
             "-r",
             "--replay_trace",
             type=str,
@@ -176,6 +182,10 @@ class Flags:
     @property
     def model_file(self):
         return self.args.model_file
+
+    @property
+    def failure_config(self):
+        return self.args.failure_config
 
     @property
     def replay_trace(self):

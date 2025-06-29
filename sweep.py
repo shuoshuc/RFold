@@ -98,6 +98,9 @@ def replay(trace_folder: str):
             f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
             f"--rsize {rsize} -r {trace} --stats_outdir {output}"
         )
+        failure_config = os.path.join(trace_path, "failed_nodes.csv")
+        if os.path.isfile(failure_config):
+            cmd += f" --failure_config {failure_config}"
         cmds.append(cmd)
 
     # Reserve 2 cores for the system to remain responsive.

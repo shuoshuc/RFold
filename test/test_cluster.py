@@ -5,7 +5,7 @@ import numpy as np
 from hilbert import decode as hdecode
 
 from common.job import Job, TopoType
-from common.utils import spec_parser
+from common.utils import spec_parser, failure_sampling
 from Cluster.cluster import Cluster
 
 JOB = Job(
@@ -163,3 +163,18 @@ class TestClusterSimple(unittest.TestCase):
         job.allocation = {C1_NODE1: 3, C1_NODE2: 3}
         # This triggers an exception from the underlying nodes.
         self.assertRaises(ValueError, self.cluster.complete, job)
+
+    def test_node_failure(self):
+        """
+        Verify that failed nodes are marked as unavailable.
+        """
+        failed_nodes = failure_sampling(self.cluster, 4)
+        self.assertEqual(len(failed_nodes), 4)
+        # Make sure the failed nodes are in the cluster.
+        for node_name in failed_nodes:
+            self.assertIn(node_name, self.cluster.allNodes())
+            self.assertEqual(self.cluster.getIdleXPU(node_name), 1)
+        self.cluster.failNodes(failed_nodes)
+        # After marking nodes as failed, they should not be available.
+        for node_name in failed_nodes:
+            self.assertEqual(self.cluster.getIdleXPU(node_name), 0)
