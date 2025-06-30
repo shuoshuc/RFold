@@ -178,3 +178,4 @@ class TestClusterSimple(unittest.TestCase):
         # After marking nodes as failed, they should not be available.
         for node_name in failed_nodes:
             self.assertEqual(self.cluster.getIdleXPU(node_name), 0)
+        self.assertEqual(failed_nodes, self.cluster.getFailedNodes())

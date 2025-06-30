@@ -44,6 +44,8 @@ class Cluster:
         self.tier0s: dict[str, Switch] = {}
         # (Clos only) A map from switch name to T1 switch object.
         self.tier1s: dict[str, Switch] = {}
+        # List of failed node id.
+        self.failed_nodes: list[str] = []
 
         # ----- start parsing the cluster spec -----
         self.name = spec["name"]
@@ -254,11 +256,18 @@ class Cluster:
         """
         Fail the nodes in the cluster by setting their availability to 0.
         """
+        self.failed_nodes = node_names
         for node_name in node_names:
             if node_name not in self.nodes:
                 logging.warning(f"Failed node {node_name} not found in the cluster.")
                 continue
             self.nodes[node_name].num_idle_xpu = 0
+
+    def getFailedNodes(self) -> list[str]:
+        """
+        Return the list of failed nodes in the cluster.
+        """
+        return self.failed_nodes
 
     def visualize(self):
         """

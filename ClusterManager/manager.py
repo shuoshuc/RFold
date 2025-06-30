@@ -207,11 +207,8 @@ class ClusterManager:
                     ) or not self.scheduler.check_total_node(queued_job):
                         queued_job.logRejectReason(self.env.now, "resource")
             elif decision == SchedDecision.REJECT:
-                # We need to filter the infeasible shapes for static torus in order to
-                # get firstfit to run.
-                if FLAGS.place_policy in ["firstfit", "folding"] and any(
-                    sz > min(FLAGS.dim) for sz in job.shape
-                ):
+                # We need to filter the infeasible shapes to unblock the scheduler.
+                if self.shouldGiveUp(job):
                     self.new_job_queue.remove(job)
                     if job.uuid in self.jobs_to_watch:
                         self.jobs_to_watch.remove(job.uuid)
@@ -322,3 +319,18 @@ class ClusterManager:
                 len(self.running_job_queue.slist),
             )
         )
+
+    def shouldGiveUp(self, job: Job) -> bool:
+        """
+        Check if the cluster manager should give up on scheduling jobs.
+        True if:
+        (1) the placement policy is not reconfigurable, and
+            one of the job's shapes exceeds the torus dimension.
+        (2) nothing else is running and there are failed nodes.
+        """
+        reconfigurable = FLAGS.place_policy in ["reconfig", "rfold"]
+        if not reconfigurable and any(sz > min(FLAGS.dim) for sz in job.shape):
+            return True
+        if len(self.running_job_queue) <= 0 and len(self.cluster.getFailedNodes()) > 0:
+            return True
+        return False
