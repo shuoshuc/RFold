@@ -510,9 +510,9 @@ def plot_folding_1d2d(ax):
 
     draw_elliptical_arrow_3d(
         ax,
-        center=(0.5, 0.9),  # (y, z) center of the ellipse
+        center=(0.5, 0.85),  # (y, z) center of the ellipse
         radius_a=0.22,  # Radius in the y-direction
-        radius_b=0.7,  # Radius in the z-direction
+        radius_b=0.65,  # Radius in the z-direction
         start_angle=120,
         end_angle=380,
         plane="yz",  # Draw in a plane parallel to the YZ plane
