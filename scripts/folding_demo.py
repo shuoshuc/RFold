@@ -20,9 +20,9 @@ class Arrow3D(FancyArrowPatch):
         return np.min(zs)
 
 
-FONTSIZE = 9
+FONTSIZE = 10.5
 DEFAULT_COLOR = "silver"
-CUBE_ASPECT = lambda x, y, z, gap_size: (x - 1 + 0.5, (y - 1) + gap_size, z - 1 - 0.3)
+CUBE_ASPECT = lambda x, y, z, gap_size: (x - 1 + 0.3, (y - 1) + gap_size, z - 1 - 0.5)
 
 
 def draw_split_cuboid(
@@ -89,7 +89,7 @@ def draw_split_cuboid(
     # Plot ONLY the standard (non-highlighted) nodes in blue.
     if standard_nodes_coords:
         std_x, std_y, std_z = zip(*standard_nodes_coords)
-        ax.scatter(std_x, std_y, std_z, c=DEFAULT_COLOR, s=100, alpha=1.0)
+        ax.scatter(std_x, std_y, std_z, c=DEFAULT_COLOR, s=50, alpha=1.0)
 
     # Plot ONLY the highlighted nodes with their custom colors.
     for (hx, hy, hz), color in highlighted_nodes.items():
@@ -100,7 +100,7 @@ def draw_split_cuboid(
             if split_info and split_info["axis"] == "y" and hy >= split_info["index"]:
                 plot_y_highlight += gap_size
             # Draw the single, correctly-colored circle.
-            ax.scatter(hx, plot_y_highlight, hz, c=color, s=100, alpha=1.0, zorder=10)
+            ax.scatter(hx, plot_y_highlight, hz, c=color, s=50, alpha=1.0, zorder=10)
 
     # --- 4. Connect All Nodes Using Lines ---
     def check_visible_surface(pi, pj, pk):
@@ -268,7 +268,7 @@ def draw_split_cuboid_3d(
     # Plot ONLY the standard (non-highlighted) nodes in blue.
     if standard_nodes_coords:
         std_x, std_y, std_z = zip(*standard_nodes_coords)
-        ax.scatter(std_x, std_y, std_z, c=DEFAULT_COLOR, s=100, alpha=1.0, zorder=1)
+        ax.scatter(std_x, std_y, std_z, c=DEFAULT_COLOR, s=50, alpha=1.0, zorder=1)
 
     # Plot ONLY the highlighted nodes with their custom colors.
     for (hx, hy, hz), color in highlighted_nodes.items():
@@ -288,7 +288,7 @@ def draw_split_cuboid_3d(
                 hz,
                 ec=ec,
                 c=color,
-                s=100,
+                s=50,
                 alpha=1.0,
                 zorder=1,
             )
@@ -572,7 +572,7 @@ def plot_folding_1d2d(ax):
     ax.text(
         0,
         0.5,
-        1.7,
+        1.6,
         "Y'",
         color="black",
         zorder=25,
@@ -886,12 +886,14 @@ if __name__ == "__main__":
     plot_folding_1d2d(ax1)
     ax2 = fig.add_subplot(122, projection="3d")
     plot_folding_3d(ax2)
+    fig.get_layout_engine().set(wspace=0, w_pad=0)
 
     job_1d_color = "#2ca02c"
     job_2d_color = "#1f77b4"
     job_2d_folded_color = "#ff7f0e"
     job_3d_color = "#d62728"
     color_unused = DEFAULT_COLOR
+    markersize = 6.5
 
     # Create proxy artists with visible lines
     legend_elements = [
@@ -902,7 +904,7 @@ if __name__ == "__main__":
             color=job_1d_color,
             label="Folded 1D job\n(18x1x1)",
             markerfacecolor=job_1d_color,
-            markersize=8,
+            markersize=markersize,
             linestyle="-",
         ),
         Line2D(
@@ -912,7 +914,7 @@ if __name__ == "__main__":
             color=job_2d_color,
             label="Original 2D job\n(1x6x4)",
             markerfacecolor=job_2d_color,
-            markersize=8,
+            markersize=markersize,
             linestyle="-",
         ),
         Line2D(
@@ -922,7 +924,7 @@ if __name__ == "__main__":
             color=job_2d_folded_color,
             label="Folded 3D job\n(4x2x3)",
             markerfacecolor=job_2d_folded_color,
-            markersize=8,
+            markersize=markersize,
             linestyle="-",
         ),
         Line2D(
@@ -932,7 +934,7 @@ if __name__ == "__main__":
             color=job_3d_color,
             label="Folded 3D job\n(4x4x4)",
             markerfacecolor=job_3d_color,
-            markersize=8,
+            markersize=markersize,
             linestyle="-",
         ),
         Line2D(
@@ -942,7 +944,7 @@ if __name__ == "__main__":
             color=color_unused,
             label="Unused",
             markerfacecolor=color_unused,
-            markersize=8,
+            markersize=markersize,
             linestyle="-",
         ),
     ]
@@ -950,9 +952,9 @@ if __name__ == "__main__":
     fig.legend(
         handles=legend_elements,
         loc="upper left",
-        bbox_to_anchor=(0.035, 0.88),
+        bbox_to_anchor=(1.01, 0.75),
         fontsize=FONTSIZE,
-        ncol=5,
+        ncol=1,
         columnspacing=0.9,
     )
 
@@ -962,8 +964,8 @@ if __name__ == "__main__":
 
     # Now crop the PDF.
     # 1 inch = 72 points in PDF coordinate system
-    inches_from_top = 0.39
-    inches_from_bottom = 0.8
+    inches_from_top = 0.88
+    inches_from_bottom = 0.85
 
     reader = PdfReader(plot_file_name)
     writer = PdfWriter()
