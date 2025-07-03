@@ -96,7 +96,7 @@ def extract_avg_util(results, exp_filters, policy_filters, ptiles):
                 )
     avg_util = {}
     for p, item in util_cdf.items():
-        avg_util[p] = {ptile: np.mean(item[ptile]) for ptile in item.keys()}
+        avg_util[p] = [np.mean(item[ptile]) for ptile in item.keys()]
     return avg_util
 
 
