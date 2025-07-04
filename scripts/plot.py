@@ -86,7 +86,6 @@ def plot_util(util_cdf, legend_map=None):
             color=color,
             linestyle=linestyle,
         )
-        # print(f"{p} cluster utilization: {util_cdf[p]}")
 
     ax.set_xlabel("Avg cluster utilization (%)")
     ax.set_ylabel("CDF")
@@ -96,17 +95,13 @@ def plot_util(util_cdf, legend_map=None):
     ax.set_ylim([-0.02, 1.02])
     ax.set_yticks([y for y in np.arange(0, 1.02, 0.2)])
     ax.legend(
-        # handlelength=1.2,
-        handlelength=1.0,
-        # labelspacing=0.1,
+        handlelength=0.9,
         labelspacing=-0.1,
-        # handletextpad=0.5,
-        handletextpad=0.3,
-        # borderaxespad=0.5,
-        borderaxespad=0.3,
+        handletextpad=0.2,
+        borderaxespad=0.2,
         frameon=True,
         fontsize=FONTSIZE,
-        borderpad=0.2,
+        borderpad=0.1,
     )
     ax.grid(linestyle="--", alpha=0.7)
 
@@ -121,8 +116,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     exp_filters = [
-        # "exp26",
-        "exp28"
+        "exp26",
+        # "exp28"
     ]
     policy_filter = ["firstfit", "folding", "reconfig", "rfold"]
     stats_outdir = sys.argv[1]
@@ -138,22 +133,22 @@ if __name__ == "__main__":
 
     # Plot custom JCT bars
     bars = {
-        r"rfold ($2^3$)": {
+        r"RFold ($2^3$)": {
             0.5: 0.3896,
             0.9: 9.29,
             0.99: 224.267,
         },
-        r"reconfig ($2^3$)": {
+        r"Reconfig ($2^3$)": {
             0.5: 0.446,
             0.9: 12.39,
             0.99: 231.897,
         },
-        r"rfold ($4^3$)": {
+        r"RFold ($4^3$)": {
             0.5: 0.47,
             0.9: 16.95,
             0.99: 241.6975,
         },
-        r"reconfig ($4^3$)": {
+        r"Reconfig ($4^3$)": {
             0.5: 5.52,
             0.9: 101.27,
             0.99: 526.015,
@@ -165,4 +160,10 @@ if __name__ == "__main__":
     avg_util = extract_avg_util(
         results, exp_filters, policy_filter, ptiles=np.linspace(0, 1, num=200)
     )
-    plot_util(avg_util)
+    util_legend_map = {
+        "firstfit": r"FirstFit ($16^3$)",
+        "folding": r"Folding ($16^3$)",
+        "reconfig": r"Reconfig ($4^3$)",
+        "rfold": r"RFold ($4^3$)",
+    }
+    plot_util(avg_util, legend_map=util_legend_map)
