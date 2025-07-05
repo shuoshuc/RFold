@@ -189,7 +189,7 @@ class MixedWorkload:
             # Jobs of size 1, 2 are special.
             self.shapes[1] = [[(1, 1, 1)], [], []]
             self.shapes[2] = [[(2, 1, 1)], [], []]
-            for s in range(4, 2049, 4):
+            for s in range(4, self.cluster_mgr.cluster.numNodes() + 1, 4):
                 self.shapes[s] = [[], [], []]
                 if s <= 256:
                     # Valid to have 1D shape.
