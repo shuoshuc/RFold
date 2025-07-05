@@ -78,7 +78,7 @@ def gen_trace(runs):
 def replay(trace_folder: str):
     sim_duration = [5000 * 3600]
     dimensions = ["16,16,16"]
-    place_policy = ["reconfig"]
+    place_policy = ["rfold", "reconfig", "firstfit", "folding"]
     rsize = [4]
     trace_paths = [
         os.path.join(trace_folder, subfolder) for subfolder in os.listdir(trace_folder)
