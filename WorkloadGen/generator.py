@@ -231,18 +231,19 @@ class MixedWorkload:
                 shapes.append(final_tup)
         return shapes
 
-    def sample_job_size(self, exp_dist: bool) -> int:
+    def sample_job_size(self, uniform: bool) -> int:
         """
         Generates a random job size.
         """
-        if exp_dist:
-            choices = sorted(self.shapes.keys())
-            skew = 4
-            dist = stats.truncexpon(b=skew, scale=len(choices) / skew)
-            idx = np.clip(dist.rvs(1).astype(int)[0], 0, len(choices) - 1)
-            return choices[idx]
+        if uniform:
+            # Uniform sampling.
+            return random.choice(list(self.shapes.keys()))
 
-        return random.choice(list(self.shapes.keys()))
+        choices = sorted(self.shapes.keys())
+        skew = 4
+        dist = stats.truncexpon(b=skew, scale=len(choices) / skew)
+        idx = np.clip(dist.rvs(1).astype(int)[0], 0, len(choices) - 1)
+        return choices[idx]
 
     def generate_shape(self, job_size: int, uniform_dist: bool) -> tuple[int, ...]:
         """
@@ -310,10 +311,12 @@ class MixedWorkload:
         Parameters:
             time_mark: jobs generated before this mark must complete.
         """
+        # Select between uniform and exponential sampling.
+        uniform = False
         while True:
             iat = float(round(self.rv_iat.rvs(size=1)[0]))
-            job_size = self.sample_job_size(exp_dist=True)
-            job_shape = self.generate_shape(job_size, uniform_dist=False)
+            job_size = self.sample_job_size(uniform=uniform)
+            job_shape = self.generate_shape(job_size, uniform_dist=uniform)
             new_job = Job(
                 uuid=self.uuidgen.fetch(),
                 arrival_time_sec=self.abs_time_sec,
