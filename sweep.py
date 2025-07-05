@@ -39,7 +39,7 @@ def replay_helper(i, cmd):
     )
 
 
-def sweep():
+def gen_trace(runs):
     # Only import flags in the function scope. common.flags imports argparse, which
     # messes with sys.argv when loaded. Hence, delay importing until args are consumed.
     from common.flags import (
@@ -47,31 +47,30 @@ def sweep():
         ALIBABA_TRACE,
         HELIOS_TRACE,
         ACME_TRACE,
+        IAT_DIST,
     )
 
     # All the parameters to sweep over.
-    sim_duration = [10000 * 3600]
-    dimensions = ["16,16,16"]
-    trace = [PHILLY_TRACE]
-    iat = ["WorkloadGen/data/iat_csv/iat5.csv"]
-    place_policy = ["reconfig"]
+    sim_dur = 10000 * 3600
+    dim = "16,16,16"
+    trace = PHILLY_TRACE
+    iat = IAT_DIST
+    rsize = 4
+    policy = "reconfig"
 
     start_time = time.time()
-    configs = list(product(sim_duration, dimensions, trace, iat, place_policy))
     cmds = []
-    for args in configs:
-        sim_dur, dim, trace_file, iat_file, policy = args
+    for _ in range(runs):
         cmd = (
             f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
-            f"--rsize 4 -clt 10 --dur_trace_file {trace_file} --iat_file {iat_file} "
+            f"--rsize {rsize} -clt 10 --dur_trace_file {trace} --iat_file {iat} "
+            # "--log_level WARNING "
         )
         cmds.append(cmd)
 
     # Reserve 2 cores for the system to remain responsive.
     with mp.Pool(processes=mp.cpu_count() - 2) as pool:
-        pool.starmap(
-            run_process, [(i + 1, len(configs), cmd) for i, cmd in enumerate(cmds)]
-        )
+        pool.starmap(run_process, [(i + 1, runs, cmd) for i, cmd in enumerate(cmds)])
     end_time = time.time()
     print(f"Total execution time: {round((end_time - start_time) / 60, 0)} min")
 
@@ -122,6 +121,6 @@ if __name__ == "__main__":
         # Drop the command line arguments to avoid argparse error.
         sys.argv = sys.argv[:1]
     if not trace_folder:
-        sweep()
+        gen_trace(runs=100)
     else:
         replay(trace_folder)
