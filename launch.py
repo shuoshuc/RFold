@@ -71,7 +71,7 @@ def main():
     # Start simulation.
     logging.info("Simulation starts")
     mgr_proc = env.process(mgr.schedule())
-    env.process(workload.run(time_mark=FLAGS.sim_mark_sec))
+    env.process(workload.run(time_mark=FLAGS.sim_mark_sec, desired_dim=-1))
     # Run the simulation until the manager process exits.
     # Note: this might leave some jobs incomplete.
     env.run(until=mgr_proc)

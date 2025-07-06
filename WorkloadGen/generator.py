@@ -184,6 +184,14 @@ class MixedWorkload:
         random.seed(42)
 
         # Cache all the valid job shapes.
+        # `self.shapes` data structure:
+        # {
+        #     job_size: [
+        #         [(1D shape)],
+        #         [(2D shape), (2D shape), ...],
+        #         [(3D shape), (3D shape), ...]
+        #     ]
+        # }
         self.shapes = {}
         if not job_size_file:
             # Jobs of size 1, 2 are special.
@@ -202,6 +210,18 @@ class MixedWorkload:
         else:
             # TODO: A job size distribution is provided, so use it instead.
             pass
+
+        # Cached dimension-specific shapes.
+        self.shapes_1d = {}
+        self.shapes_2d = {}
+        self.shapes_3d = {}
+        for size, (shape_list_1d, shape_list_2d, shape_list_3d) in self.shapes.items():
+            if len(shape_list_1d) > 0:
+                self.shapes_1d[size] = shape_list_1d
+            if len(shape_list_2d) > 0:
+                self.shapes_2d[size] = shape_list_2d
+            if len(shape_list_3d) > 0:
+                self.shapes_3d[size] = shape_list_3d
 
     def check_shape(self, shape: tuple[int, ...]) -> bool:
         blocks_needed, _, _ = self.cluster_mgr.scheduler._reconfig_param_map(
@@ -248,6 +268,10 @@ class MixedWorkload:
     def generate_shape(self, job_size: int, uniform_dist: bool) -> tuple[int, ...]:
         """
         Generates a shape for the given job size.
+
+        Parameters:
+            job_size: the size of the job.
+            uniform_dist: whether to use uniform distribution for sampling.
         """
         idx_choices = []
         for i, shape_list in enumerate(self.shapes[job_size]):
@@ -278,6 +302,24 @@ class MixedWorkload:
         shape_idx = random.randint(0, len(self.shapes[job_size][choice_of_dim]) - 1)
         return self.shapes[job_size][choice_of_dim][shape_idx][: self.ndim]
 
+    def generate_desired_shape(self, desired_dim: int) -> tuple[int, ...]:
+        """
+        Generates a desired shape for the given job size.
+
+        Parameters:
+            desired_dim: the desired dimension of the shape (1, 2, or 3).
+        """
+        shape_dict = None
+        if desired_dim == 1:
+            shape_dict = self.shapes_1d
+        elif desired_dim == 2:
+            shape_dict = self.shapes_2d
+        elif desired_dim == 3:
+            shape_dict = self.shapes_3d
+        job_size = random.choice(list(shape_dict.keys()))
+        shape_idx = random.randint(0, len(shape_dict[job_size]) - 1)
+        return shape_dict[job_size][shape_idx][: self.ndim]
+
     def _loadIATDist(self, filename: Union[str, StringIO]):
         """
         Loads the given job inter-arrival time (IAT) csv file (or a StringIO equivalent)
@@ -304,12 +346,16 @@ class MixedWorkload:
             probs = np.array(probs) / sum(probs)
         self.rv_iat = rv_discrete(values=(iats, probs))
 
-    def run(self, time_mark: float = None) -> Iterator[simpy.events.Timeout]:
+    def run(
+        self, time_mark: float = None, desired_dim: int = -1
+    ) -> Iterator[simpy.events.Timeout]:
         """
         Generates jobs indefinitely and enqueues them.
 
         Parameters:
             time_mark: jobs generated before this mark must complete.
+            desired_dim: the desired dimension of the job shape (1, 2, or 3).
+                         If -1, the workload contains mixed dimensions.
         """
         # Select between uniform and exponential sampling.
         uniform = False
@@ -317,6 +363,10 @@ class MixedWorkload:
             iat = float(round(self.rv_iat.rvs(size=1)[0]))
             job_size = self.sample_job_size(uniform=uniform)
             job_shape = self.generate_shape(job_size, uniform_dist=uniform)
+            # A desired dimension is specified, override the choice.
+            if desired_dim > 0:
+                job_shape = self.generate_desired_shape(desired_dim)
+                job_size = np.prod(job_shape)
             new_job = Job(
                 uuid=self.uuidgen.fetch(),
                 arrival_time_sec=self.abs_time_sec,
