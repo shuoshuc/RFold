@@ -169,11 +169,13 @@ class MixedWorkload:
         arrival_time_file: str,
         job_size_file: str,
         dur_trace: str,
+        desired_dim: int,
     ):
         self.env = env
         self.cluster_mgr = cluster_mgr
         self.ndim = ndim
         self.rsize = rsize
+        self.desired_dim = desired_dim
         if not arrival_time_file or not dur_trace:
             raise RuntimeError("Distribution files are not provided")
         # Job inter-arrival time is modeled by `self.rv_iat`, in seconds.
@@ -346,9 +348,7 @@ class MixedWorkload:
             probs = np.array(probs) / sum(probs)
         self.rv_iat = rv_discrete(values=(iats, probs))
 
-    def run(
-        self, time_mark: float = None, desired_dim: int = -1
-    ) -> Iterator[simpy.events.Timeout]:
+    def run(self, time_mark: float = None) -> Iterator[simpy.events.Timeout]:
         """
         Generates jobs indefinitely and enqueues them.
 
@@ -364,8 +364,8 @@ class MixedWorkload:
             job_size = self.sample_job_size(uniform=uniform)
             job_shape = self.generate_shape(job_size, uniform_dist=uniform)
             # A desired dimension is specified, override the choice.
-            if desired_dim > 0:
-                job_shape = self.generate_desired_shape(desired_dim)
+            if self.desired_dim > 0:
+                job_shape = self.generate_desired_shape(self.desired_dim)
                 job_size = np.prod(job_shape)
             new_job = Job(
                 uuid=self.uuidgen.fetch(),

@@ -66,12 +66,13 @@ def main():
             arrival_time_file=FLAGS.iat_file,
             job_size_file=FLAGS.job_size_file,
             dur_trace=FLAGS.dur_trace_file,
+            desired_dim=-1,
         )
 
     # Start simulation.
     logging.info("Simulation starts")
     mgr_proc = env.process(mgr.schedule())
-    env.process(workload.run(time_mark=FLAGS.sim_mark_sec, desired_dim=-1))
+    env.process(workload.run(time_mark=FLAGS.sim_mark_sec))
     # Run the simulation until the manager process exits.
     # Note: this might leave some jobs incomplete.
     env.run(until=mgr_proc)
