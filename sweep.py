@@ -56,6 +56,7 @@ def gen_trace(runs):
     trace = PHILLY_TRACE
     iat = IAT_DIST
     rsize = 4
+    shape_multiple = 2
     policy = "reconfig"
 
     start_time = time.time()
@@ -64,6 +65,7 @@ def gen_trace(runs):
         cmd = (
             f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
             f"--rsize {rsize} -clt 10 --dur_trace_file {trace} --iat_file {iat} "
+            f"--shape_multiple {shape_multiple} "
             # "--log_level WARNING "
         )
         cmds.append(cmd)
