@@ -67,6 +67,7 @@ def main():
             job_size_file=FLAGS.job_size_file,
             dur_trace=FLAGS.dur_trace_file,
             desired_dim=-1,
+            shape_multiple=FLAGS.shape_multiple,
         )
 
     # Start simulation.

@@ -170,12 +170,14 @@ class MixedWorkload:
         job_size_file: str,
         dur_trace: str,
         desired_dim: int,
+        shape_multiple: int,
     ):
         self.env = env
         self.cluster_mgr = cluster_mgr
         self.ndim = ndim
         self.rsize = rsize
         self.desired_dim = desired_dim
+        self.shape_multiple = shape_multiple
         if not arrival_time_file or not dur_trace:
             raise RuntimeError("Distribution files are not provided")
         # Job inter-arrival time is modeled by `self.rv_iat`, in seconds.
@@ -199,13 +201,16 @@ class MixedWorkload:
             # Jobs of size 1, 2 are special.
             self.shapes[1] = [[(1, 1, 1)], [], []]
             self.shapes[2] = [[(2, 1, 1)], [], []]
-            for s in range(4, self.cluster_mgr.cluster.numNodes() + 1, 4):
+            # Check all even job sizes starting from 4.
+            for s in range(4, self.cluster_mgr.cluster.numNodes() + 1, 2):
                 self.shapes[s] = [[], [], []]
-                if s <= 256:
+                if s <= 256 and s % self.shape_multiple == 0:
                     # Valid to have 1D shape.
                     self.shapes[s][0] = [(s, 1, 1)]
                 for dim in [2, 3]:
-                    self.shapes[s][dim - 1] = self.all_shapes_for_size(s, dim)
+                    self.shapes[s][dim - 1] = self.all_shapes_for_size(
+                        s, dim, self.shape_multiple
+                    )
                 # If size `s` has no valid shapes, remove it from the dict.
                 if all(len(shape_list) <= 0 for shape_list in self.shapes[s]):
                     del self.shapes[s]
@@ -233,7 +238,9 @@ class MixedWorkload:
             self.cluster_mgr.cluster.numNodes() // self.rsize**self.ndim
         )
 
-    def all_shapes_for_size(self, job_size: int, dim: int) -> list[tuple[int, ...]]:
+    def all_shapes_for_size(
+        self, job_size: int, dim: int, multiple: int
+    ) -> list[tuple[int, ...]]:
         """
         For a given job size and dimension, generates all valid shapes.
         """
@@ -244,7 +251,8 @@ class MixedWorkload:
         limit = self.cluster_mgr.cluster.numNodes() // self.rsize**self.ndim * self.rsize
         factorize = factorize2 if dim == 2 else factorize3
         for tup in factorize(job_size):
-            if not all(i % 2 == 0 for i in tup):
+            # Only keep shapes that are multiples of `multiple`, e.g., 2 or 4.
+            if not all(i % multiple == 0 for i in tup):
                 continue
             if not all(j <= limit for j in tup):
                 continue

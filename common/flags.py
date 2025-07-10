@@ -135,6 +135,12 @@ class Flags:
             help=("New job queue threshold for closed-loop scheduling."),
         )
         self.parser.add_argument(
+            "--shape_multiple",
+            type=int,
+            default=2,
+            help=("Ensures that all job shapes are multiples of this value."),
+        )
+        self.parser.add_argument(
             "--log_level",
             type=str,
             default="INFO",
@@ -210,6 +216,10 @@ class Flags:
     @property
     def closed_loop_threshold(self):
         return self.args.closed_loop_threshold
+
+    @property
+    def shape_multiple(self):
+        return self.args.shape_multiple
 
     @property
     def log_level(self):
