@@ -44,9 +44,11 @@ def gen_trace(runs):
     # messes with sys.argv when loaded. Hence, delay importing until args are consumed.
     from common.flags import (
         PHILLY_TRACE,
-        ALIBABA_TRACE,
+        ALIBABA20_TRACE,
+        ALIBABA23_TRACE,
         HELIOS_TRACE,
         ACME_TRACE,
+        CRUX_TRACE,
         IAT_DIST,
     )
 
