@@ -54,6 +54,9 @@ class SortedList:
     def __repr__(self) -> str:
         return f"SortedList({self.slist})"
 
+    def __iter__(self):
+        return iter(self.slist)
+
 
 class ClusterManager:
     def __init__(
@@ -96,14 +99,21 @@ class ClusterManager:
         # If set, new job queue will drop jobs exceeding this threshold.
         self.closed_loop_threshold: int = closed_loop_threshold
 
+    def totalNewWork(self) -> float:
+        """
+        Returns the total amount of new work received (in XPU * hours).
+        """
+        return sum(job.size * job.duration_sec / 3600 for job in self.new_job_queue)
+
     def submitJob(self, job: Job, wait_to_complete: bool):
         """
         Enqueue a job into the new job queue. If `wait_to_complete` is True, simulation
         only terminates after the job is completed.
         """
-        if len(self.new_job_queue) > self.closed_loop_threshold > 0:
+        new_work = self.totalNewWork()
+        if new_work > self.closed_loop_threshold > 0:
             logging.debug(
-                f"t = {self.env.now}, new job queue len {len(self.new_job_queue)}, "
+                f"t = {self.env.now}, total new work {new_work}, "
                 f"dropping job: {job.short_print()}"
             )
             return

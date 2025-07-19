@@ -130,9 +130,9 @@ class Flags:
         self.parser.add_argument(
             "-clt",
             "--closed_loop_threshold",
-            type=int,
+            type=float,
             default=0,
-            help=("New job queue threshold for closed-loop scheduling."),
+            help=("New job queue threshold (in XPU * hours) for closed-loop scheduling."),
         )
         self.parser.add_argument(
             "--shape_multiple",

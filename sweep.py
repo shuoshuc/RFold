@@ -54,6 +54,7 @@ def gen_trace(runs):
     sim_dur = 10000 * 3600
     dim = "16,16,16"
     trace = PHILLY_TRACE
+    clt = 1e6
     iat = IAT_DIST
     rsize = 4
     shape_multiple = 2
@@ -64,7 +65,7 @@ def gen_trace(runs):
     for _ in range(runs):
         cmd = (
             f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
-            f"--rsize {rsize} -clt 10 --dur_trace_file {trace} --iat_file {iat} "
+            f"--rsize {rsize} -clt {clt} --dur_trace_file {trace} --iat_file {iat} "
             f"--shape_multiple {shape_multiple} "
             # "--log_level WARNING "
         )
