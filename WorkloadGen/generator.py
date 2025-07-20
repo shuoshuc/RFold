@@ -176,6 +176,8 @@ class MixedWorkload:
         self.cluster_mgr = cluster_mgr
         self.ndim = ndim
         self.rsize = rsize
+        # The desired dimension of the job shape (1, 2, or 3).
+        # If -1, the workload contains mixed dimensions.
         self.desired_dim = desired_dim
         self.shape_multiple = shape_multiple
         if not arrival_time_file or not dur_trace:
@@ -356,14 +358,9 @@ class MixedWorkload:
             probs = np.array(probs) / sum(probs)
         self.rv_iat = rv_discrete(values=(iats, probs))
 
-    def run(self, time_mark: float = None) -> Iterator[simpy.events.Timeout]:
+    def run(self) -> Iterator[simpy.events.Timeout]:
         """
         Generates jobs indefinitely and enqueues them.
-
-        Parameters:
-            time_mark: jobs generated before this mark must complete.
-            desired_dim: the desired dimension of the job shape (1, 2, or 3).
-                         If -1, the workload contains mixed dimensions.
         """
         # Select between uniform and exponential sampling.
         uniform = False
@@ -387,10 +384,5 @@ class MixedWorkload:
                 new_job.duration_sec = random.choice(self.cached_duration)
 
             yield self.env.timeout(new_job.arrival_time_sec - self.env.now)
-            # If a stop time is provided, jobs generated prior to the stop time must all
-            # complete. Otherwise, all jobs must complete.
-            wait_to_complete = True
-            if time_mark is not None and self.abs_time_sec > time_mark:
-                wait_to_complete = False
-            self.cluster_mgr.submitJob(new_job, wait_to_complete)
+            self.cluster_mgr.submitJob(new_job)
             self.abs_time_sec += iat

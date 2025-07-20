@@ -24,14 +24,11 @@ class Flags:
         # Parse command line arguments.
         self.parser = argparse.ArgumentParser(description="Simulation entry point.")
         self.parser.add_argument(
-            "-t",
-            "--sim_mark_sec",
+            "-n",
+            "--sim_njobs",
             type=int,
-            default=0,
-            help=(
-                "Jobs arrive before this time mark must all complete for the simulation "
-                "to terminate."
-            ),
+            default=1000,
+            help=("Stop the simulation after specified number of jobs have completed."),
         )
         self.parser.add_argument(
             "--defer_sched_sec",
@@ -160,8 +157,8 @@ class Flags:
         self.args = self.parser.parse_args()
 
     @property
-    def sim_mark_sec(self):
-        return self.args.sim_mark_sec
+    def sim_njobs(self):
+        return self.args.sim_njobs
 
     @property
     def defer_sched_sec(self):

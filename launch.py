@@ -51,7 +51,10 @@ def main():
         cluster.failNodes(failed_nodes)
     # Initialize the cluster manager.
     mgr = ClusterManager(
-        env, cluster=cluster, closed_loop_threshold=FLAGS.closed_loop_threshold
+        env,
+        cluster=cluster,
+        sim_njobs=FLAGS.sim_njobs,
+        closed_loop_threshold=FLAGS.closed_loop_threshold,
     )
     # Spin up the workload generator. If a trace is provided, replay the trace.
     # Otherwise, generate a new workload.
@@ -73,7 +76,7 @@ def main():
     # Start simulation.
     logging.info("Simulation starts")
     mgr_proc = env.process(mgr.schedule())
-    env.process(workload.run(time_mark=FLAGS.sim_mark_sec))
+    env.process(workload.run())
     # Run the simulation until the manager process exits.
     # Note: this might leave some jobs incomplete.
     env.run(until=mgr_proc)

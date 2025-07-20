@@ -53,7 +53,7 @@ def gen_trace(runs):
     )
 
     # All the parameters to sweep over.
-    sim_dur = 10000 * 3600
+    sim_njobs = 1000
     dim = "16,16,16"
     trace = PHILLY_TRACE
     clt = 1e6
@@ -66,7 +66,7 @@ def gen_trace(runs):
     cmds = []
     for _ in range(runs):
         cmd = (
-            f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
+            f"python3 launch.py -n {sim_njobs} --dim {dim} --place_policy {policy} "
             f"--rsize {rsize} -clt {clt} --dur_trace_file {trace} --iat_file {iat} "
             f"--shape_multiple {shape_multiple} "
             # "--log_level WARNING "
@@ -81,7 +81,7 @@ def gen_trace(runs):
 
 
 def replay(trace_folder: str):
-    sim_duration = [5000 * 3600]
+    sim_njobs = 1000
     dimensions = ["16,16,16"]
     place_policy = ["rfold", "reconfig", "firstfit", "folding"]
     rsize = [4]
@@ -90,16 +90,16 @@ def replay(trace_folder: str):
     ]
 
     start_time = time.time()
-    configs = list(product(sim_duration, dimensions, trace_paths, place_policy, rsize))
+    configs = list(product(dimensions, trace_paths, place_policy, rsize))
     cmds = []
     for args in configs:
-        sim_dur, dim, trace_path, policy, rsize = args
+        dim, trace_path, policy, rsize = args
         trace = os.path.join(trace_path, "trace.csv")
         output = os.path.join(trace_path, policy)
         if not os.path.exists(output):
             os.makedirs(output)
         cmd = (
-            f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
+            f"python3 launch.py -n {sim_njobs} --dim {dim} --place_policy {policy} "
             f"--rsize {rsize} -r {trace} --stats_outdir {output}"
         )
         failure_config = os.path.join(trace_path, "failed_nodes.csv")
