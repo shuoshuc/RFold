@@ -64,7 +64,7 @@ class ClusterManager:
         env: simpy.core.Environment,
         cluster: Cluster,
         sim_njobs: int,
-        closed_loop_threshold: int = 0,
+        closed_loop_threshold: float = 0,
     ):
         self.env = env
         # The cluster instance under management.
@@ -100,7 +100,7 @@ class ClusterManager:
         # The simulation will stop after the specified number of jobs have completed.
         self.sim_njobs = sim_njobs
         # If set, new job queue will drop jobs exceeding this threshold.
-        self.closed_loop_threshold: int = closed_loop_threshold
+        self.closed_loop_threshold: float = closed_loop_threshold
 
     def totalNewWork(self) -> float:
         """
