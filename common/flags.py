@@ -5,7 +5,7 @@ import argparse
 # C2: 2-tier Clos
 TPU_JOB_SIZES_DIST = "WorkloadGen/data/tpu_job_size.csv"
 TPU_ARRIVAL_TIME_DIST = "WorkloadGen/data/tpu_arrival_time.csv"
-IAT_DIST = "WorkloadGen/data/iat.csv"
+IAT_DIST = "WorkloadGen/data/iat15.csv"
 PHILLY_TRACE = "WorkloadGen/data/philly_trace.csv"
 ALIBABA20_TRACE = "WorkloadGen/data/alibaba_v2020.csv"
 ALIBABA23_TRACE = "WorkloadGen/data/alibaba_v2023.csv"
