@@ -53,21 +53,21 @@ def gen_trace(runs):
     )
 
     # All the parameters to sweep over.
-    sim_njobs = 1000
+    sim_njobs = 1500
     dim = "16,16,16"
-    trace = PHILLY_TRACE
-    clt = 1e6
+    duration = ACME_TRACE
+    clt = 0
     iat = IAT_DIST
     rsize = 4
     shape_multiple = 2
-    policy = "reconfig"
+    policy = "slurm_hilbert"
 
     start_time = time.time()
     cmds = []
     for _ in range(runs):
         cmd = (
             f"python3 launch.py -n {sim_njobs} --dim {dim} --place_policy {policy} "
-            f"--rsize {rsize} -clt {clt} --dur_trace_file {trace} --iat_file {iat} "
+            f"--rsize {rsize} -clt {clt} --dur_trace_file {duration} --iat_file {iat} "
             f"--shape_multiple {shape_multiple} "
             # "--log_level WARNING "
         )
@@ -83,7 +83,7 @@ def gen_trace(runs):
 def replay(trace_folder: str):
     sim_njobs = 1000
     dimensions = ["16,16,16"]
-    place_policy = ["rfold", "reconfig", "firstfit", "folding"]
+    place_policy = ["rfold", "reconfig", "firstfit", "folding", "slurm_hilbert"]
     rsize = [4]
     trace_paths = [
         os.path.join(trace_folder, subfolder) for subfolder in os.listdir(trace_folder)

@@ -579,7 +579,7 @@ class SchedulingPolicy:
         if policy == "firstfit":
             return self._firstfit(job)
         elif policy == "reconfig":
-            return self._reconfig(job, rsize)
+            return self._reconfig(job, rsize, free_loc=True)
         elif policy == "rfold":
             return self._rfold(job, rsize)
         elif policy == "folding":
