@@ -126,6 +126,6 @@ if __name__ == "__main__":
         # Drop the command line arguments to avoid argparse error.
         sys.argv = sys.argv[:1]
     if not trace_folder:
-        gen_trace(runs=5)
+        gen_trace(runs=100)
     else:
         replay(trace_folder)
