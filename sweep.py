@@ -53,14 +53,14 @@ def gen_trace(runs):
     )
 
     # All the parameters to sweep over.
-    sim_njobs = 1500
+    sim_njobs = 5000
     dim = "16,16,16"
     duration = ACME_TRACE
     clt = 0
     iat = IAT_DIST
     rsize = 4
     shape_multiple = 2
-    policy = "slurm_hilbert"
+    policy = "reconfig"
 
     start_time = time.time()
     cmds = []
@@ -126,6 +126,6 @@ if __name__ == "__main__":
         # Drop the command line arguments to avoid argparse error.
         sys.argv = sys.argv[:1]
     if not trace_folder:
-        gen_trace(runs=100)
+        gen_trace(runs=5)
     else:
         replay(trace_folder)
