@@ -1,4 +1,4 @@
-The MLOCS project leverages OCS to improve the ML cluster performance, reliability, cost and power consumption.
+This project leverages OCS to improve the ML cluster utilization and job performance.
 
 # Requirements
 
