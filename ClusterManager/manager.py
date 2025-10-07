@@ -45,12 +45,27 @@ class SortedList:
         """
         return self.slist.pop(0)
 
+    def __len__(self) -> int:
+        """
+        Returns the length of the list.
+        """
+        return len(self.slist)
+
     def __repr__(self) -> str:
         return f"SortedList({self.slist})"
 
+    def __iter__(self):
+        return iter(self.slist)
+
 
 class ClusterManager:
-    def __init__(self, env: simpy.core.Environment, cluster: Cluster):
+    def __init__(
+        self,
+        env: simpy.core.Environment,
+        cluster: Cluster,
+        sim_njobs: int,
+        closed_loop_threshold: float = 0,
+    ):
         self.env = env
         # The cluster instance under management.
         self.cluster = cluster
@@ -82,15 +97,31 @@ class ClusterManager:
         # A list of cluster statistics, each tuple is
         # (time, utilization, # jobs running, # jobs queued).
         self.cluster_stats: list[tuple[int, float, int, int]] = []
+        # The simulation will stop after the specified number of jobs have completed.
+        self.sim_njobs = sim_njobs
+        # If set, new job queue will drop jobs exceeding this threshold.
+        self.closed_loop_threshold: float = closed_loop_threshold
 
-    def submitJob(self, job: Job, wait_to_complete: bool):
+    def totalNewWork(self) -> float:
         """
-        Enqueue a job into the new job queue. If `wait_to_complete` is True, simulation
-        only terminates after the job is completed.
+        Returns the total amount of new work received (in XPU * hours).
         """
+        return sum(job.size * job.duration_sec / 3600 for job in self.new_job_queue)
+
+    def submitJob(self, job: Job):
+        """
+        Enqueue a job into the new job queue.
+        """
+        new_work = self.totalNewWork()
+        if new_work > self.closed_loop_threshold > 0:
+            logging.debug(
+                f"t = {self.env.now}, total new work {new_work}, "
+                f"dropping job: {job.short_print()}"
+            )
+            return
         self.new_job_queue.enqueue(job)
         logging.debug(f"t = {self.env.now}, enqueued: {job.short_print()}")
-        if wait_to_complete:
+        if self.sim_njobs > 0:
             self.jobs_to_watch.append(job.uuid)
         self.event_arrival.trigger()
 
@@ -144,6 +175,8 @@ class ClusterManager:
                 # This job is being watched, should be removed from the watch list.
                 if job.uuid in self.jobs_to_watch:
                     self.jobs_to_watch.remove(job.uuid)
+                    # Decrement the stop criteria tracker if a job completes successfully.
+                    self.sim_njobs -= 1
                 logging.debug(f"t = {self.env.now}, {job.short_print()} completed")
                 self.completeOnCluster(job)
             except simpy.Interrupt:
@@ -188,7 +221,24 @@ class ClusterManager:
                     ) or not self.scheduler.check_total_node(queued_job):
                         queued_job.logRejectReason(self.env.now, "resource")
             elif decision == SchedDecision.REJECT:
-                pass
+                # We need to filter the infeasible shapes to unblock the scheduler.
+                if self.shouldGiveUp(job):
+                    self.new_job_queue.remove(job)
+                    if job.uuid in self.jobs_to_watch:
+                        self.jobs_to_watch.remove(job.uuid)
+                    job.queueing_delay_sec = float("inf")
+                    job.jct_sec = float("inf")
+                    job.slowdown = float("inf")
+                    self.job_stats[job.uuid] = job
+                    logging.info(
+                        f"t = {self.env.now}, job shape exceeds torus dimension, skipping job {job.short_print()}"
+                    )
+                    continue
+                if len(self.running_job_queue) <= 0:
+                    raise RuntimeError(
+                        f"t = {self.env.now}, cluster is empty, but job is rejected: "
+                        f"{job_to_sched.short_print()}"
+                    )
             elif decision == SchedDecision.PREEMPT:
                 # TODO: replace with actual preemption
                 # Sleep for a short period to simulate job migration delay.
@@ -207,7 +257,7 @@ class ClusterManager:
                 self.executeOnCluster(job_to_sched)
 
             # Watch list closes, it will only be drained going forward.
-            if self.env.now > FLAGS.sim_mark_sec:
+            if self.sim_njobs <= 0:
                 logging.info(
                     f"Wait list has closed, there are {len(self.jobs_to_watch)} jobs."
                 )
@@ -283,3 +333,18 @@ class ClusterManager:
                 len(self.running_job_queue.slist),
             )
         )
+
+    def shouldGiveUp(self, job: Job) -> bool:
+        """
+        Check if the cluster manager should give up on scheduling jobs.
+        True if:
+        (1) the placement policy is not reconfigurable, and
+            one of the job's shapes exceeds the torus dimension.
+        (2) nothing else is running and there are failed nodes.
+        """
+        reconfigurable = FLAGS.place_policy in ["reconfig", "rfold"]
+        if not reconfigurable and any(sz > min(FLAGS.dim) for sz in job.shape):
+            return True
+        if len(self.running_job_queue) <= 0 and len(self.cluster.getFailedNodes()) > 0:
+            return True
+        return False

@@ -26,53 +26,90 @@ def run_process(i, tot, cmd):
     )
 
 
-def main(trace_folder: str):
+def replay_helper(i, cmd):
+    start = time.time()
+    result = subprocess.run(cmd, shell=True)
+    end = time.time()
+
+    if result.returncode != 0:
+        print(f"[ERROR] run{i} failed with return code {result.returncode}", flush=True)
+    print(
+        f"run {i} took {round((end - start) / 60, 0)} min: {cmd}",
+        flush=True,
+    )
+
+
+def gen_trace(runs):
     # Only import flags in the function scope. common.flags imports argparse, which
     # messes with sys.argv when loaded. Hence, delay importing until args are consumed.
     from common.flags import (
         PHILLY_TRACE,
-        ALIBABA_TRACE,
+        ALIBABA20_TRACE,
+        ALIBABA23_TRACE,
         HELIOS_TRACE,
         ACME_TRACE,
+        CRUX_TRACE,
         IAT_DIST,
     )
 
     # All the parameters to sweep over.
-    sim_duration = [50 * 3600, 100 * 3600]
-    dimensions = ["16,16,16", "24,24,24", "32,32,32"]
-    if trace_folder:
-        # Include all csv files in the trace folder.
-        trace = [
-            os.path.join(root, file)
-            for root, _, files in os.walk(trace_folder)
-            for file in files
-            if file.endswith(".csv")
-        ]
-    else:
-        trace = [PHILLY_TRACE, ALIBABA_TRACE, HELIOS_TRACE, ACME_TRACE]
-    iat = [IAT_DIST]
-    place_policy = ["firstfit", "slurm_hilbert"]
+    sim_njobs = 5000
+    dim = "16,16,16"
+    duration = ACME_TRACE
+    clt = 0
+    iat = IAT_DIST
+    rsize = 4
+    shape_multiple = 2
+    policy = "reconfig"
 
     start_time = time.time()
-    configs = list(product(sim_duration, dimensions, trace, iat, place_policy))
     cmds = []
-    for args in configs:
-        sim_dur, dim, trace_file, iat_file, policy = args
+    for _ in range(runs):
         cmd = (
-            f"python3 launch.py -t {sim_dur} --dim {dim} --place_policy {policy} "
-            f"--log_level WARNING "
+            f"python3 launch.py -n {sim_njobs} --dim {dim} --place_policy {policy} "
+            f"--rsize {rsize} -clt {clt} --dur_trace_file {duration} --iat_file {iat} "
+            f"--shape_multiple {shape_multiple} "
+            # "--log_level WARNING "
         )
-        if trace_folder:
-            cmd += f"-r {trace_file} "
-        else:
-            cmd += f"--dur_trace_file {trace_file} --iat_file {iat_file} "
         cmds.append(cmd)
 
     # Reserve 2 cores for the system to remain responsive.
     with mp.Pool(processes=mp.cpu_count() - 2) as pool:
-        pool.starmap(
-            run_process, [(i + 1, len(configs), cmd) for i, cmd in enumerate(cmds)]
+        pool.starmap(run_process, [(i + 1, runs, cmd) for i, cmd in enumerate(cmds)])
+    end_time = time.time()
+    print(f"Total execution time: {round((end_time - start_time) / 60, 0)} min")
+
+
+def replay(trace_folder: str):
+    sim_njobs = 1000
+    dimensions = ["16,16,16"]
+    place_policy = ["rfold", "reconfig", "firstfit", "folding", "slurm_hilbert"]
+    rsize = [4]
+    trace_paths = [
+        os.path.join(trace_folder, subfolder) for subfolder in os.listdir(trace_folder)
+    ]
+
+    start_time = time.time()
+    configs = list(product(dimensions, trace_paths, place_policy, rsize))
+    cmds = []
+    for args in configs:
+        dim, trace_path, policy, rsize = args
+        trace = os.path.join(trace_path, "trace.csv")
+        output = os.path.join(trace_path, policy)
+        if not os.path.exists(output):
+            os.makedirs(output)
+        cmd = (
+            f"python3 launch.py -n {sim_njobs} --dim {dim} --place_policy {policy} "
+            f"--rsize {rsize} -r {trace} --stats_outdir {output}"
         )
+        failure_config = os.path.join(trace_path, "failed_nodes.csv")
+        if os.path.isfile(failure_config):
+            cmd += f" --failure_config {failure_config}"
+        cmds.append(cmd)
+
+    # Reserve 2 cores for the system to remain responsive.
+    with mp.Pool(processes=mp.cpu_count() - 2) as pool:
+        pool.starmap(replay_helper, [(i + 1, cmd) for i, cmd in enumerate(cmds)])
     end_time = time.time()
     print(f"Total execution time: {round((end_time - start_time) / 60, 0)} min")
 
@@ -88,4 +125,7 @@ if __name__ == "__main__":
         trace_folder = sys.argv[1]
         # Drop the command line arguments to avoid argparse error.
         sys.argv = sys.argv[:1]
-    main(trace_folder)
+    if not trace_folder:
+        gen_trace(runs=100)
+    else:
+        replay(trace_folder)

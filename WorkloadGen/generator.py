@@ -1,7 +1,9 @@
 import copy
 import logging
+import math
 import numpy as np
 import random
+import scipy.stats as stats
 import simpy
 from collections.abc import Iterator
 from io import StringIO
@@ -11,7 +13,7 @@ from typing import Union
 from common.flags import FLAGS
 from common.job import TopoType, Job, SplitShape
 from common.simpleUUID import SimpleUUID
-from common.utils import extract_duration
+from common.utils import extract_duration, factorize2, factorize3
 from ClusterManager.manager import ClusterManager
 
 
@@ -150,4 +152,237 @@ class WorkloadGenerator:
                 wait_to_complete = False
             self.cluster_mgr.submitJob(new_job, wait_to_complete)
 
+            self.abs_time_sec += iat
+
+
+class MixedWorkload:
+    """
+    A mixed workload generator that combines 1D/2D/3D workloads.
+    """
+
+    def __init__(
+        self,
+        env: simpy.core.Environment,
+        cluster_mgr: ClusterManager,
+        ndim: int,
+        rsize: int,
+        arrival_time_file: str,
+        job_size_file: str,
+        dur_trace: str,
+        desired_dim: int,
+        shape_multiple: int,
+    ):
+        self.env = env
+        self.cluster_mgr = cluster_mgr
+        self.ndim = ndim
+        self.rsize = rsize
+        # The desired dimension of the job shape (1, 2, or 3).
+        # If -1, the workload contains mixed dimensions.
+        self.desired_dim = desired_dim
+        self.shape_multiple = shape_multiple
+        if not arrival_time_file or not dur_trace:
+            raise RuntimeError("Distribution files are not provided")
+        # Job inter-arrival time is modeled by `self.rv_iat`, in seconds.
+        self.abs_time_sec = 0
+        self._loadIATDist(arrival_time_file)
+        self.uuidgen = SimpleUUID()
+        self.cached_duration = extract_duration(dur_trace)
+        random.seed(42)
+
+        # Cache all the valid job shapes.
+        # `self.shapes` data structure:
+        # {
+        #     job_size: [
+        #         [(1D shape)],
+        #         [(2D shape), (2D shape), ...],
+        #         [(3D shape), (3D shape), ...]
+        #     ]
+        # }
+        self.shapes = {}
+        if not job_size_file:
+            # Jobs of size 1, 2 are special.
+            self.shapes[1] = [[(1, 1, 1)], [], []]
+            self.shapes[2] = [[(2, 1, 1)], [], []]
+            # Check all even job sizes starting from 4.
+            for s in range(4, self.cluster_mgr.cluster.numNodes() + 1, 2):
+                self.shapes[s] = [[], [], []]
+                if s <= 256 and s % self.shape_multiple == 0:
+                    # Valid to have 1D shape.
+                    self.shapes[s][0] = [(s, 1, 1)]
+                for dim in [2, 3]:
+                    self.shapes[s][dim - 1] = self.all_shapes_for_size(
+                        s, dim, self.shape_multiple
+                    )
+                # If size `s` has no valid shapes, remove it from the dict.
+                if all(len(shape_list) <= 0 for shape_list in self.shapes[s]):
+                    del self.shapes[s]
+        else:
+            # TODO: A job size distribution is provided, so use it instead.
+            pass
+
+        # Cached dimension-specific shapes.
+        self.shapes_1d = {}
+        self.shapes_2d = {}
+        self.shapes_3d = {}
+        for size, (shape_list_1d, shape_list_2d, shape_list_3d) in self.shapes.items():
+            if len(shape_list_1d) > 0:
+                self.shapes_1d[size] = shape_list_1d
+            if len(shape_list_2d) > 0:
+                self.shapes_2d[size] = shape_list_2d
+            if len(shape_list_3d) > 0:
+                self.shapes_3d[size] = shape_list_3d
+
+    def check_shape(self, shape: tuple[int, ...]) -> bool:
+        blocks_needed, _, _ = self.cluster_mgr.scheduler._reconfig_param_map(
+            shape, self.rsize
+        )
+        return sum(blocks_needed.values()) <= (
+            self.cluster_mgr.cluster.numNodes() // self.rsize**self.ndim
+        )
+
+    def all_shapes_for_size(
+        self, job_size: int, dim: int, multiple: int
+    ) -> list[tuple[int, ...]]:
+        """
+        For a given job size and dimension, generates all valid shapes.
+        """
+        if dim not in [2, 3]:
+            raise ValueError(f"generating shapes: invalid dimension {dim}")
+
+        shapes = []
+        limit = self.cluster_mgr.cluster.numNodes() // self.rsize**self.ndim * self.rsize
+        factorize = factorize2 if dim == 2 else factorize3
+        for tup in factorize(job_size):
+            # Only keep shapes that are multiples of `multiple`, e.g., 2 or 4.
+            if not all(i % multiple == 0 for i in tup):
+                continue
+            if not all(j <= limit for j in tup):
+                continue
+            final_tup = tup if len(tup) == 3 else (*tup, 1)
+            if self.check_shape(final_tup):
+                shapes.append(final_tup)
+        return shapes
+
+    def sample_job_size(self, uniform: bool) -> int:
+        """
+        Generates a random job size.
+        """
+        if uniform:
+            # Uniform sampling.
+            return random.choice(list(self.shapes.keys()))
+
+        choices = sorted(self.shapes.keys())
+        skew = 4
+        dist = stats.truncexpon(b=skew, scale=len(choices) / skew)
+        idx = np.clip(dist.rvs(1).astype(int)[0], 0, len(choices) - 1)
+        return choices[idx]
+
+    def generate_shape(self, job_size: int, uniform_dist: bool) -> tuple[int, ...]:
+        """
+        Generates a shape for the given job size.
+
+        Parameters:
+            job_size: the size of the job.
+            uniform_dist: whether to use uniform distribution for sampling.
+        """
+        idx_choices = []
+        for i, shape_list in enumerate(self.shapes[job_size]):
+            if len(shape_list) > 0 and i < self.ndim:
+                idx_choices.append(i)
+
+        choice_of_dim = None
+        if uniform_dist:
+            # Uniform sampling.
+            choice_of_dim = int(np.random.choice(idx_choices))
+        else:
+            # Non-uniform sampling.
+            if job_size <= 256:
+                intersect = sorted(set(idx_choices) & set([0, 1]))
+                choice_of_dim = random.choices(
+                    intersect, weights=[[0.8, 0.2, 0][i] for i in intersect]
+                )[0]
+            elif job_size <= 1024:
+                intersect = sorted(set(idx_choices) & set([1, 2]))
+                choice_of_dim = random.choices(
+                    intersect, weights=[[0, 0.8, 0.2][i] for i in intersect]
+                )[0]
+            else:
+                intersect = sorted(set(idx_choices) & set([1, 2]))
+                choice_of_dim = random.choices(
+                    intersect, weights=[[0, 0.2, 0.8][i] for i in intersect]
+                )[0]
+        shape_idx = random.randint(0, len(self.shapes[job_size][choice_of_dim]) - 1)
+        return self.shapes[job_size][choice_of_dim][shape_idx][: self.ndim]
+
+    def generate_desired_shape(self, desired_dim: int) -> tuple[int, ...]:
+        """
+        Generates a desired shape for the given job size.
+
+        Parameters:
+            desired_dim: the desired dimension of the shape (1, 2, or 3).
+        """
+        shape_dict = None
+        if desired_dim == 1:
+            shape_dict = self.shapes_1d
+        elif desired_dim == 2:
+            shape_dict = self.shapes_2d
+        elif desired_dim == 3:
+            shape_dict = self.shapes_3d
+        job_size = random.choice(list(shape_dict.keys()))
+        shape_idx = random.randint(0, len(shape_dict[job_size]) - 1)
+        return shape_dict[job_size][shape_idx][: self.ndim]
+
+    def _loadIATDist(self, filename: Union[str, StringIO]):
+        """
+        Loads the given job inter-arrival time (IAT) csv file (or a StringIO equivalent)
+        and parses it into a distribution (PDF).
+        """
+        self.dist_iat = {}
+
+        is_file = not isinstance(filename, StringIO)
+        f = filename
+        if is_file:
+            f = open(filename, "r", encoding="utf-8")
+        for line in f.readlines():
+            # Skips the comment line.
+            if line.startswith("#"):
+                continue
+            iat_sec, p = map(float, line.strip().split(","))
+            new_prob = self.dist_iat.setdefault(iat_sec, 0) + p
+            self.dist_iat[iat_sec] = new_prob
+        if is_file:
+            f.close()
+        iats, probs = zip(*self.dist_iat.items())
+        # If the distribution does not add up to 1, normalize it.
+        if sum(probs) != 1:
+            probs = np.array(probs) / sum(probs)
+        self.rv_iat = rv_discrete(values=(iats, probs))
+
+    def run(self) -> Iterator[simpy.events.Timeout]:
+        """
+        Generates jobs indefinitely and enqueues them.
+        """
+        # Select between uniform and exponential sampling.
+        uniform = False
+        while True:
+            iat = float(round(self.rv_iat.rvs(size=1)[0]))
+            job_size = self.sample_job_size(uniform=uniform)
+            job_shape = self.generate_shape(job_size, uniform_dist=uniform)
+            # A desired dimension is specified, override the choice.
+            if self.desired_dim > 0:
+                job_shape = self.generate_desired_shape(self.desired_dim)
+                job_size = np.prod(job_shape)
+            new_job = Job(
+                uuid=self.uuidgen.fetch(),
+                arrival_time_sec=self.abs_time_sec,
+                topology=TopoType.T3D_NT if self.ndim == 3 else TopoType.T2D,
+                shape=job_shape,
+                size=job_size,
+                duration_sec=0,
+            )
+            while not new_job.duration_sec:
+                new_job.duration_sec = random.choice(self.cached_duration)
+
+            yield self.env.timeout(new_job.arrival_time_sec - self.env.now)
+            self.cluster_mgr.submitJob(new_job)
             self.abs_time_sec += iat

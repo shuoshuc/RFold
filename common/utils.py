@@ -5,6 +5,7 @@ import simpy
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
+from typing import Type
 
 from common.job import FormShape
 
@@ -110,6 +111,38 @@ def viz3D(dimx: int, dimy: int, dimz: int, array: NDArray[np.float64]):
     plt.show()
 
 
+def factorize2(x):
+    """
+    Generates all (m, n) such that m * n = x.
+    """
+    pairs = set()
+    for m in range(2, int(np.sqrt(x)) + 1):
+        if x % m == 0:
+            n = x // m
+            pairs.add(tuple(sorted((m, n))))
+    return pairs
+
+
+def factorize3(N):
+    """
+    Generates all (x, y, z) such that x * y * z = N.
+    """
+    triplets = set()
+
+    x = 2
+    while x**3 <= N:
+        if N % x == 0:
+            residual = N // x
+            # Start y from x to ensure x <= y
+            y = x
+            while y**2 <= residual:
+                if residual % y == 0:
+                    triplets.add((x, y, residual // y))
+                y += 1
+        x += 1
+    return triplets
+
+
 def extract_duration(csv_path):
     durations = []
     with open(csv_path, mode="r") as file:
@@ -178,7 +211,7 @@ def dump_job_stats(stats: dict, stats_output: str):
                 job.completion_time_sec,
                 job.size,
                 job.queueing_delay_sec,
-                job.completion_time_sec,
+                job.jct_sec,
                 job.wait_on_resource_sec,
                 job.wait_on_shape_sec,
                 job.slowdown,
@@ -217,3 +250,17 @@ def dump_cluster_stats(stats: list[tuple], stats_output: str):
         writer = csv.writer(file)
         writer.writerow(["#time (sec)", "util", "jobs queued", "jobs running"])
         writer.writerows(out)
+
+
+def failure_sampling(cluster: Type[object], M: int) -> list[str]:
+    """
+    Sample M nodes to fail from the cluster.
+    """
+    all_nodes = list(cluster.nodes.keys())
+    if M > len(all_nodes):
+        raise ValueError(
+            f"Requested {M} nodes to fail, but only {len(all_nodes)} nodes available."
+        )
+
+    indices = np.random.choice(len(all_nodes), M, replace=False)
+    return [all_nodes[i] for i in indices]

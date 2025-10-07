@@ -19,6 +19,8 @@ def genIAT(lambda_rate: float, output: str):
     return freq
 
 
-# Generate IAT distributions with different rates (# jobs / hour).
-for rate in [1, 5]:
-    freq = genIAT(lambda_rate=rate / 3600, output=f"iat{rate}.csv")
+if __name__ == "__main__":
+    # Generate IAT distributions with different rates (# jobs / hour).
+    # These rates correspond to the average load of 0.1, 0.4, 0.8.
+    for rate in [0.2, 0.5, 1]:
+        freq = genIAT(lambda_rate=rate / 3600, output=f"iat{rate}.csv")

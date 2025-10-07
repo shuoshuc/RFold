@@ -5,11 +5,13 @@ import argparse
 # C2: 2-tier Clos
 TPU_JOB_SIZES_DIST = "WorkloadGen/data/tpu_job_size.csv"
 TPU_ARRIVAL_TIME_DIST = "WorkloadGen/data/tpu_arrival_time.csv"
-IAT_DIST = "WorkloadGen/data/iat.csv"
+IAT_DIST = "WorkloadGen/data/iat15.csv"
 PHILLY_TRACE = "WorkloadGen/data/philly_trace.csv"
-ALIBABA_TRACE = "WorkloadGen/data/alibaba_v2020.csv"
+ALIBABA20_TRACE = "WorkloadGen/data/alibaba_v2020.csv"
+ALIBABA23_TRACE = "WorkloadGen/data/alibaba_v2023.csv"
 HELIOS_TRACE = "WorkloadGen/data/helios.csv"
 ACME_TRACE = "WorkloadGen/data/acme.csv"
+CRUX_TRACE = "WorkloadGen/data/crux.csv"
 C1_TRACE = "WorkloadGen/data/c1_trace.csv"
 C2_TRACE = "WorkloadGen/data/c2_trace.csv"
 
@@ -22,14 +24,11 @@ class Flags:
         # Parse command line arguments.
         self.parser = argparse.ArgumentParser(description="Simulation entry point.")
         self.parser.add_argument(
-            "-t",
-            "--sim_mark_sec",
+            "-n",
+            "--sim_njobs",
             type=int,
-            default=0,
-            help=(
-                "Jobs arrive before this time mark must all complete for the simulation "
-                "to terminate."
-            ),
+            default=1000,
+            help=("Stop the simulation after specified number of jobs have completed."),
         )
         self.parser.add_argument(
             "--defer_sched_sec",
@@ -46,7 +45,8 @@ class Flags:
             type=str,
             default="firstfit",
             help=(
-                "Job placement policy to use. Available options: firstfit, slurm_hilbert."
+                "Job placement policy to use. Available options: "
+                "firstfit, slurm_hilbert, reconfig, rfold, folding."
             ),
         )
         self.parser.add_argument(
@@ -75,10 +75,26 @@ class Flags:
             ),
         )
         self.parser.add_argument(
+            "--rsize",
+            type=int,
+            default=4,
+            help=(
+                "Reconfigurable block size. "
+                "E.g., an rsize of 4 means a 4x4 or 4x4x4 block of nodes is "
+                "the smallest reconfigurable unit."
+            ),
+        )
+        self.parser.add_argument(
             "--model_file",
             type=str,
             default="",
             help=("Path to the cluster spec file."),
+        )
+        self.parser.add_argument(
+            "--failure_config",
+            type=str,
+            default="",
+            help=("Path to the config file of failed nodes."),
         )
         self.parser.add_argument(
             "-r",
@@ -96,7 +112,7 @@ class Flags:
         self.parser.add_argument(
             "--job_size_file",
             type=str,
-            default=TPU_JOB_SIZES_DIST,
+            default="",
             help=("Job size/shape distribution file."),
         )
         self.parser.add_argument(
@@ -109,6 +125,19 @@ class Flags:
             "--frac_xpu",
             action="store_true",
             help=("Enable fractional XPU support if true."),
+        )
+        self.parser.add_argument(
+            "-clt",
+            "--closed_loop_threshold",
+            type=float,
+            default=0,
+            help=("New job queue threshold (in XPU * hours) for closed-loop scheduling."),
+        )
+        self.parser.add_argument(
+            "--shape_multiple",
+            type=int,
+            default=2,
+            help=("Ensures that all job shapes are multiples of this value."),
         )
         self.parser.add_argument(
             "--log_level",
@@ -128,8 +157,8 @@ class Flags:
         self.args = self.parser.parse_args()
 
     @property
-    def sim_mark_sec(self):
-        return self.args.sim_mark_sec
+    def sim_njobs(self):
+        return self.args.sim_njobs
 
     @property
     def defer_sched_sec(self):
@@ -152,8 +181,16 @@ class Flags:
         return self.args.dim
 
     @property
+    def rsize(self):
+        return self.args.rsize
+
+    @property
     def model_file(self):
         return self.args.model_file
+
+    @property
+    def failure_config(self):
+        return self.args.failure_config
 
     @property
     def replay_trace(self):
@@ -174,6 +211,14 @@ class Flags:
     @property
     def frac_xpu(self):
         return self.args.frac_xpu
+
+    @property
+    def closed_loop_threshold(self):
+        return self.args.closed_loop_threshold
+
+    @property
+    def shape_multiple(self):
+        return self.args.shape_multiple
 
     @property
     def log_level(self):

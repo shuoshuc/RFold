@@ -1,108 +1,169 @@
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import os
 import sys
+import warnings
+
+from parser import (
+    parse,
+    extract_avg_jcr,
+    extract_avg_jct,
+    extract_avg_util,
+)
+
+warnings.filterwarnings("ignore")
+
+COLORS = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+LINESTYLES = [":", "--", "-.", "-"]
+HATCHES = [None, "/", ".", "\\"]
+FIG_W, FIG_H = 2.6, 1.5
+FONTSIZE = 10
 
 
-def run_config(run_id: int) -> str:
-    configs = {
-        0: "sim=50hr, dim=16x16x16, job=philly",
-        16: "sim=100hr, dim=16x16x16, job=philly",
-        17: "sim=100hr, dim=16x16x16, job=ali20",
-        19: "sim=100hr, dim=16x16x16, job=acme",
-        28: "sim=100hr, dim=32x32x32, job=philly",
-    }
-    return configs[run_id]
+def plot_jct_bar(jct_bars, legend_map=None):
+    plt.rcParams["font.size"] = FONTSIZE
+    bar_width = 0.15
+    fig, ax = plt.subplots(1, 1, figsize=(FIG_W, FIG_H), layout="constrained")
 
-
-def load(stats_outdir: str, run_id: list[int]) -> tuple[dict, dict]:
-    job_stats, cluster_stats = {}, {}
-    for run in run_id:
-        job_stats[run] = pd.read_csv(
-            os.path.join(stats_outdir, f"run{run}", "job_stats.csv")
+    colors = iter(COLORS)
+    hatches = iter(HATCHES)
+    percentiles = ["p50", "p90", "p99"]
+    x = np.arange(len(percentiles))
+    policies = list(jct_bars.keys())
+    for i, p in enumerate(policies):
+        color = next(colors)
+        hatch = next(hatches)
+        offset = (i - (len(policies) - 1) / 2) * bar_width
+        bars = [jct_bars[p][ptile] for ptile in [0.5, 0.9, 0.99]]
+        bars = ax.bar(
+            x + offset,
+            bars,
+            width=bar_width,
+            label=legend_map[p] if legend_map else p,
+            color=color,
+            hatch=hatch,
         )
-        cluster_stats[run] = pd.read_csv(
-            os.path.join(stats_outdir, f"run{run}", "cluster_stats.csv")
+
+    ax.set_ylabel("Avg JCT (hours)")
+    ax.set_xticks(x, percentiles)
+    ax.tick_params(axis="x", length=0)
+    ax.set_xlim([-0.6, 2.5])
+    # ax.set_ylim([0, 250])
+    ax.set_yscale("log")
+    ax.legend(
+        handlelength=0.8,
+        labelspacing=-0.2,
+        handletextpad=0.2,
+        borderaxespad=0.3,
+        borderpad=0.1,
+        frameon=False,
+        fontsize=FONTSIZE,
+        # ncol=2,
+        bbox_to_anchor=(0, 1.025),
+        loc="upper left",
+    )
+    ax.grid(axis="y", linestyle="--", alpha=0.7)
+
+    # plt.show()
+    plot_file_name = "jct.pdf"
+    plt.savefig(plot_file_name, bbox_inches="tight")
+
+
+def plot_util(util_cdf, legend_map=None):
+    plt.rcParams["font.size"] = FONTSIZE
+    fig, ax = plt.subplots(1, 1, figsize=(FIG_W, FIG_H), layout="constrained")
+
+    colors = iter(COLORS)
+    linestyles = iter(LINESTYLES)
+    policies = list(util_cdf.keys())
+    for p in policies:
+        color = next(colors)
+        linestyle = next(linestyles)
+        ax.ecdf(
+            util_cdf[p],
+            label=f"{legend_map[p] if legend_map else p}",
+            color=color,
+            linestyle=linestyle,
         )
-    return job_stats, cluster_stats
 
-
-def plot_job(job_stats: dict):
-    # Disable all pandas warnings.
-    pd.options.mode.chained_assignment = None
-    fig, axs = plt.subplots(
-        len(job_stats), 3, figsize=(12, 3 * len(job_stats)), layout="constrained"
+    ax.set_xlabel("Avg cluster utilization (%)")
+    ax.set_ylabel("CDF")
+    ax.tick_params(axis="x", length=0)
+    ax.set_xlim([-5, 105])
+    ax.set_xticks([x for x in range(0, 101, 20)])
+    ax.set_ylim([-0.02, 1.02])
+    ax.set_yticks([y for y in np.arange(0, 1.02, 0.2)])
+    ax.legend(
+        handlelength=0.9,
+        labelspacing=-0.1,
+        handletextpad=0.2,
+        borderaxespad=0.2,
+        frameon=True,
+        fontsize=FONTSIZE,
+        borderpad=0.1,
     )
-    for i, (run, df) in enumerate(job_stats.items()):
-        df = df[df["queueing (sec)"].notna() & (df["queueing (sec)"] != 0)]
+    ax.grid(linestyle="--", alpha=0.7)
 
-        ax = axs[i][0]
-        ax.ecdf(df["wait on shape (sec)"] / 3600, label="wait on shape")
-        ax.ecdf(df["wait on resource (sec)"] / 3600, label="wait on resource")
-        ax.set_xlabel("time (hr)")
-        ax.set_ylabel("CDF")
-        ax.grid()
-        ax.legend(loc="lower right")
-
-        ax = axs[i][1]
-        df["shape frac"] = df["wait on shape (sec)"] / df["queueing (sec)"] * 100
-        df["resource frac"] = df["wait on resource (sec)"] / df["queueing (sec)"] * 100
-        df = df.dropna(subset=["shape frac", "resource frac"])
-        ax.ecdf(df["shape frac"], label="wait on shape")
-        ax.ecdf(df["resource frac"], label="wait on resource")
-        ax.set_xlabel("wait time / total queueing time (%)")
-        ax.set_ylabel("CDF")
-        ax.set_title(run_config(run))
-        ax.grid()
-        ax.legend(loc="lower right")
-
-        ax = axs[i][2]
-        df = df[df["jct (sec)"].notna() & (df["jct (sec)"] != 0)]
-        df["shape / jct"] = df["wait on shape (sec)"] / df["jct (sec)"] * 100
-        df["resource / jct"] = df["wait on resource (sec)"] / df["jct (sec)"] * 100
-        ax.ecdf(df["shape / jct"], label="wait on shape")
-        ax.ecdf(df["resource / jct"], label="wait on resource")
-        ax.set_xlabel("wait time / jct (%)")
-        ax.set_ylabel("CDF")
-        ax.grid()
-        ax.legend(loc="lower right")
-
-    plt.show()
-
-
-def plot_cluster(cluster_stats: dict):
-    # Disable all pandas warnings.
-    pd.options.mode.chained_assignment = None
-    fig, axs = plt.subplots(
-        len(cluster_stats), 2, figsize=(12, 2 * len(cluster_stats)), layout="constrained"
-    )
-    for i, (run, df) in enumerate(cluster_stats.items()):
-        ax = axs[i][0]
-        ax.plot(df["#time (sec)"] / 3600, df["util"] * 100)
-        ax.set_xlabel("time (hr)")
-        ax.set_ylabel("utilization (%)")
-        ax.set_title(run_config(run))
-        ax.grid()
-
-        ax = axs[i][1]
-        ax.plot(df["#time (sec)"] / 3600, df["jobs queued"], label="queued")
-        ax.plot(df["#time (sec)"] / 3600, df["jobs running"], label="running")
-        ax.set_xlabel("time (hr)")
-        ax.set_ylabel("# jobs")
-        ax.set_title(run_config(run))
-        ax.grid()
-        ax.legend(loc="upper left")
-
-    plt.show()
+    # plt.show()
+    plot_file_name = "util.pdf"
+    plt.savefig(plot_file_name, bbox_inches="tight")
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python plot.py <stats_outdir>")
+        print("Usage: python <path-to>/plot.py <stats_outdir>")
         sys.exit(1)
 
+    exp_filters = [
+        "exp26",
+        # "exp28"
+    ]
+    policy_filter = ["firstfit", "folding", "reconfig", "rfold"]
     stats_outdir = sys.argv[1]
-    run_id = [0, 16, 17, 19, 28]
-    job_stats, cluster_stats = load(stats_outdir, run_id)
-    plot_job(job_stats)
-    plot_cluster(cluster_stats)
+    # Results format: (exp, run) -> {policy: (cluster_stats_df, job_stats_df)}
+    results = parse(stats_outdir, exp_filters, policy_filter, runs=100)
+    avg_jcr = extract_avg_jcr(results, exp_filters, policy_filter)
+    print(f"Average JCR: {avg_jcr}")
+
+    # JCT percentiles
+    # ptiles = [0.5, 0.9, 0.99]
+    # avg_jct = extract_avg_jct(results, exp_filters, policy_filter, ptiles=ptiles)
+    # plot_jct_bar(avg_jct)
+
+    # Plot custom JCT bars
+    bars = {
+        r"RFold ($2^3$)": {
+            0.5: 0.3896,
+            0.9: 9.29,
+            0.99: 224.267,
+        },
+        r"Reconfig ($2^3$)": {
+            0.5: 0.446,
+            0.9: 12.39,
+            0.99: 231.897,
+        },
+        r"RFold ($4^3$)": {
+            0.5: 0.47,
+            0.9: 16.95,
+            0.99: 241.6975,
+        },
+        r"Reconfig ($4^3$)": {
+            0.5: 5.52,
+            0.9: 101.27,
+            0.99: 526.015,
+        },
+    }
+    plot_jct_bar(bars)
+
+    # Plot utilization CDF
+    avg_util = extract_avg_util(
+        results, exp_filters, policy_filter, ptiles=np.linspace(0, 1, num=200)
+    )
+    util_legend_map = {
+        "firstfit": r"FirstFit ($16^3$)",
+        "folding": r"Folding ($16^3$)",
+        "reconfig": r"Reconfig ($4^3$)",
+        "rfold": r"RFold ($4^3$)",
+    }
+    plot_util(avg_util, legend_map=util_legend_map)

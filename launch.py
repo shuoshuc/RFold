@@ -25,7 +25,7 @@ from common.utils import (
 from Cluster.cluster import Cluster
 from Cluster.model_builder import build, build_torus
 from ClusterManager.manager import ClusterManager
-from WorkloadGen.generator import WorkloadGenerator
+from WorkloadGen.generator import WorkloadGenerator, MixedWorkload
 from WorkloadGen.trace import TraceReplay
 
 
@@ -43,25 +43,40 @@ def main():
 
     # Initialize the cluster.
     cluster = Cluster(env, spec=model)
+    # If a failure config is provided, read it and fail the nodes accordingly.
+    if FLAGS.failure_config:
+        with open(FLAGS.failure_config, "r") as f:
+            failed_nodes = [line.strip() for line in f]
+        logging.debug(f"Failing nodes: {failed_nodes}")
+        cluster.failNodes(failed_nodes)
     # Initialize the cluster manager.
-    mgr = ClusterManager(env, cluster=cluster)
+    mgr = ClusterManager(
+        env,
+        cluster=cluster,
+        sim_njobs=FLAGS.sim_njobs,
+        closed_loop_threshold=FLAGS.closed_loop_threshold,
+    )
     # Spin up the workload generator. If a trace is provided, replay the trace.
     # Otherwise, generate a new workload.
     if FLAGS.replay_trace:
         workload = TraceReplay(env, tracefile=FLAGS.replay_trace, cluster_mgr=mgr)
     else:
-        workload = WorkloadGenerator(
+        workload = MixedWorkload(
             env,
+            cluster_mgr=mgr,
+            ndim=len(FLAGS.dim),
+            rsize=FLAGS.rsize,
             arrival_time_file=FLAGS.iat_file,
             job_size_file=FLAGS.job_size_file,
-            cluster_mgr=mgr,
             dur_trace=FLAGS.dur_trace_file,
+            desired_dim=-1,
+            shape_multiple=FLAGS.shape_multiple,
         )
 
     # Start simulation.
     logging.info("Simulation starts")
     mgr_proc = env.process(mgr.schedule())
-    env.process(workload.run(time_mark=FLAGS.sim_mark_sec))
+    env.process(workload.run())
     # Run the simulation until the manager process exits.
     # Note: this might leave some jobs incomplete.
     env.run(until=mgr_proc)
