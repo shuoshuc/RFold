@@ -2,7 +2,7 @@ This project leverages OCS to improve the ML cluster utilization and job perform
 
 # Requirements
 
-This simulator requires Python 3.9+ and some Python packages.
+This simulator uses uv. However, you can also manually manage the environment by installing Python 3.9+ and some Python packages.
 To install all dependencies, run:
 ```bash
 pip install 'scipy>=1.13.1' 'numpy>=2.0.2' 'simpy>=4.1.1' 'matplotlib>=3.9.2' 'numpy-hilbert-curve>=1.0.1' 'networkx>=3.2.1' 'sympy>=1.13.3'
@@ -19,9 +19,9 @@ pip install 'scipy>=1.13.1' 'numpy>=2.0.2' 'simpy>=4.1.1' 'matplotlib>=3.9.2' 'n
 # How to run
 To start a simulation, run:
 ```bash
-python launch.py
+uv run launch.py
 ```
 To run all unit tests, execute:
 ```bash
-python -m unittest
+uv run python -m unittest
 ```
