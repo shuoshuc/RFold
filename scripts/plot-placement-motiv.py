@@ -7,7 +7,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser(description="Plot RFold contention data.")
     parser.add_argument('--input', type=str, default='rfold-contention.csv', help='Input CSV file')
-    parser.add_argument('--output', type=str, default='contention.pdf', help='Output image file')
+    parser.add_argument('--output', type=str, default='static-placement-contention.pdf', help='Output image file')
     args = parser.parse_args()
 
     # Read the csv file
@@ -29,30 +29,32 @@ def main():
     # Create the plot
     plt.figure(figsize=(3.3, 3.3 * 0.5))
 
-    for col, label in columns:
-        plt.plot(df['scale'], df[col] / 60000, marker='o', label=label)
+    markers = ['.', 's', '^', 'v', 'o', 'P']
+    baseline_col = 'no contention solo (msec)'
+    for i, (col, label) in enumerate(columns):
+        plt.plot(df['scale'], df[col] / df[baseline_col], marker=markers[i], markersize=5, label=label)
 
     # Formatting the plot
     plt.xscale('log', base=2)
-    plt.yscale('log')
-    plt.gca().yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{int(y)}"))
-    plt.gca().yaxis.set_minor_formatter(ticker.NullFormatter())
     
     xticks = [4, 16, 64, 256, 1024, 4096]
     plt.xticks(xticks, xticks)
     
-    yticks = [1, 5, 10, 20]
-    plt.yticks(yticks, yticks)
-
+    plt.ylim(0.9, 2.8)
+    
+    yticks = [1.0, 1.5, 2.0, 2.5]
+    yticklabels = ['1.0x', '1.5x', '2.0x', '2.5x']
+    plt.yticks(yticks, yticklabels)
+    
     plt.xlabel('Nodes', labelpad=0)
-    plt.ylabel('Time (minutes)', labelpad=0)
+    plt.ylabel('JCT slowdown', labelpad=1)
     plt.legend(ncol=2, handlelength=1.4, handletextpad=0.4, labelspacing=0.0, columnspacing=0.5,
                loc='lower right', bbox_to_anchor=(1.02, 1.01))
     plt.grid(True, which="both", axis="x", ls="--", alpha=0.5)
     plt.grid(True, which="major", axis="y", ls="--", alpha=0.5)
     
     plt.tick_params(axis='x', length=0)
-    plt.tick_params(axis='y', length=1.75)
+    plt.tick_params(axis='y', length=0)
 
     # Save the plot
     plt.savefig(args.output, bbox_inches='tight')
