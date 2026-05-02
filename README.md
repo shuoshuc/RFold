@@ -17,6 +17,10 @@ pip install 'scipy>=1.13.1' 'numpy>=2.0.2' 'simpy>=4.1.1' 'matplotlib>=3.9.2' 'n
 * **launch.py**: starting point of the simulator.
 
 # How to run
+First make sure your local uv environment is up tp date:
+```bash
+uv sync
+```
 To start a simulation, run:
 ```bash
 uv run launch.py
