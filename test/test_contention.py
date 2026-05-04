@@ -1,5 +1,11 @@
+import logging
 import unittest
+from unittest.mock import MagicMock
 
+import simpy
+
+from Cluster.cluster import Cluster
+from ClusterManager.contention import ContentionModel
 from common.job import Job, TopoType
 
 
@@ -66,6 +72,51 @@ class TestApplySlowdown(unittest.TestCase):
         self.assertEqual(job.priority, 7 + 5 * 2)
         self.assertEqual(job.current_slowdown, 2.0)
         self.assertEqual(job.last_event_time_sec, 7)
+
+
+class TestContentionModel(unittest.TestCase):
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = MagicMock(spec=Cluster)
+        self.model = ContentionModel(self.env, self.cluster)
+
+    def test_identity_returns_one_for_all(self):
+        """The default slowdown stub returns 1.0 for every running job."""
+        jobs = [make_job(uuid=i, duration_sec=10) for i in (1, 2, 3)]
+        factors = self.model.slowdown(jobs)
+        self.assertEqual(factors, {1: 1.0, 2: 1.0, 3: 1.0})
+
+    def test_recompute_updates_all_running_jobs(self):
+        """recompute calls applySlowdown(1.0, env.now) on every running job."""
+        jobs = [make_job(uuid=i, duration_sec=10) for i in (1, 2)]
+        self.model.recompute(jobs)
+        for j in jobs:
+            self.assertEqual(j.current_slowdown, 1.0)
+            self.assertEqual(j.last_event_time_sec, self.env.now)
+            self.assertEqual(j.priority, self.env.now + 10)
+
+    def test_recompute_logs_only_on_change(self):
+        """A debug log fires when a job's factor changes, not when it stays the same."""
+
+        class TwoXModel(ContentionModel):
+            def slowdown(self, running_jobs):
+                return {j.uuid: 2.0 for j in running_jobs}
+
+        model = TwoXModel(self.env, self.cluster)
+        jobs = [make_job(uuid=1, duration_sec=10)]
+
+        # First call: 1.0 -> 2.0, expect a debug log.
+        with self.assertLogs(level="DEBUG") as cm:
+            model.recompute(jobs)
+        self.assertTrue(any("slowdown 1.0 -> 2.0" in m for m in cm.output))
+
+        # Second call at same env.now: 2.0 -> 2.0, expect NO debug log for that job.
+        with self.assertLogs(level="DEBUG") as cm:
+            # Emit a sentinel so assertLogs has something to capture even if no
+            # slowdown-change log fires.
+            logging.debug("sentinel")
+            model.recompute(jobs)
+        self.assertFalse(any("slowdown 2.0 -> 2.0" in m for m in cm.output))
 
 
 if __name__ == "__main__":
