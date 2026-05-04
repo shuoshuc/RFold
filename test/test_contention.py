@@ -212,7 +212,7 @@ class TestClusterManagerContention(unittest.TestCase):
         Expected: J2 completes at t=3, J1 completes at t=6.
         """
         j1 = _make_alloc_job(uuid=1, duration_sec=5, arrival_time_sec=0, node="n1")
-        j2 = _make_alloc_job(uuid=2, duration_sec=2, arrival_time_sec=1, node="n2")
+        j2 = _make_alloc_job(uuid=2, duration_sec=1, arrival_time_sec=1, node="n2")  # J2 dur=1 ideal; under 2x slowdown that's 2 wall seconds, completing at t=3 — matches the spec's J1/J2 worked example
         mgr = self._run([j1, j2], _TwoConcurrentSlow)
         self.assertAlmostEqual(mgr.job_stats[2].completion_time_sec, 3)
         self.assertAlmostEqual(mgr.job_stats[1].completion_time_sec, 6)
