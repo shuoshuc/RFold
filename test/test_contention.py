@@ -1,12 +1,14 @@
 import logging
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import simpy
 
+from common.job import Job, TopoType
 from Cluster.cluster import Cluster
 from ClusterManager.contention import ContentionModel
-from common.job import Job, TopoType
+from ClusterManager.manager import ClusterManager
+from ClusterManager.scheduling import SchedDecision
 
 
 def make_job(uuid: int, duration_sec: float) -> Job:
@@ -119,14 +121,6 @@ class TestContentionModel(unittest.TestCase):
         self.assertFalse(any("slowdown 2.0 -> 2.0" in m for m in cm.output))
 
 
-import copy
-from unittest.mock import patch
-
-from common.flags import FLAGS
-from ClusterManager.manager import ClusterManager
-from ClusterManager.scheduling import SchedDecision
-
-
 class _TwoConcurrentSlow(ContentionModel):
     """Slowdown 2.0 whenever 2+ jobs are running, 1.0 otherwise."""
     def slowdown(self, running_jobs):
@@ -174,26 +168,39 @@ class TestClusterManagerContention(unittest.TestCase):
             "ClusterManager.scheduling.SchedulingPolicy.place",
             side_effect=lambda j: (SchedDecision.ADMIT, j),
         ):
-            sched_proc = env.process(mgr.schedule())
+            env.process(mgr.schedule())
             env.process(feeder())
-            # Note: schedule() blocks indefinitely on event_arrival when
-            # the new-job queue empties, so env.run(until=sched_proc) cannot
-            # terminate. env.run() (no until) instead drains all scheduled
-            # events and returns once nothing is pending.
+            # Note: schedule() blocks on event_arrival once the new-job queue empties,
+            # so we cannot use until=sched_proc. simpy exits when no scheduled events
+            # remain. The assertion below catches a wrong-reason early termination.
             env.run()
 
+        # Defense against the test passing because env ran out of events before all
+        # jobs actually completed. If the running queue is non-empty here, something
+        # caused env.run() to return prematurely and the test result is unreliable.
+        self.assertEqual(
+            len(mgr.running_job_queue), 0,
+            "env.run() returned with jobs still in the running queue; test result is invalid.",
+        )
         return mgr
 
     def test_identity_baseline(self):
-        """Identity stub: jct equals duration_sec for every job."""
+        """Identity stub with overlapping jobs: JCT still equals duration_sec, but the
+        admit and complete recompute paths are both exercised. If recompute were
+        deleted, this test would still pass for non-overlapping jobs — overlap is
+        what makes it a real regression guard."""
         jobs = [
-            _make_alloc_job(uuid=1, duration_sec=4, arrival_time_sec=0, node="n1"),
-            _make_alloc_job(uuid=2, duration_sec=3, arrival_time_sec=10, node="n2"),
+            _make_alloc_job(uuid=1, duration_sec=10, arrival_time_sec=0, node="n1"),
+            # Arrives while J1 is still running, so the admit-path recompute fires
+            # with two jobs in the running queue. J2 finishes first, so the
+            # complete-path recompute also fires while J1 is still alive.
+            _make_alloc_job(uuid=2, duration_sec=4, arrival_time_sec=2, node="n2"),
         ]
         mgr = self._run(jobs, ContentionModel)
-        self.assertAlmostEqual(mgr.job_stats[1].jct_sec, 4)
+        # Identity stub means slowdown is always 1.0; JCT equals ideal duration.
+        self.assertAlmostEqual(mgr.job_stats[1].jct_sec, 10)
         self.assertAlmostEqual(mgr.job_stats[1].slowdown, 1.0)
-        self.assertAlmostEqual(mgr.job_stats[2].jct_sec, 3)
+        self.assertAlmostEqual(mgr.job_stats[2].jct_sec, 4)
         self.assertAlmostEqual(mgr.job_stats[2].slowdown, 1.0)
 
     def test_fixed_2x_doubles_jct_when_alone(self):
@@ -208,9 +215,10 @@ class TestClusterManagerContention(unittest.TestCase):
         self.assertAlmostEqual(mgr.job_stats[2].jct_sec, 6)   # 3 * 2
 
     def test_J1_J2_end_to_end(self):
-        """The worked example: J1 dur=5 alone, J2 dur=2 arrives at t=1, both run at 2x while overlapping.
-        Expected: J2 completes at t=3, J1 completes at t=6.
-        """
+        """The worked example from the design spec: J1 (dur=5 ideal) at t=0,
+        J2 (dur=1 ideal) arrives at t=1; symmetric 2x slowdown applies while
+        both run concurrently. J2 (1 ideal sec at 2x = 2 wall sec) completes
+        at t=3, J1 completes at t=6."""
         j1 = _make_alloc_job(uuid=1, duration_sec=5, arrival_time_sec=0, node="n1")
         j2 = _make_alloc_job(uuid=2, duration_sec=1, arrival_time_sec=1, node="n2")  # J2 dur=1 ideal; under 2x slowdown that's 2 wall seconds, completing at t=3 — matches the spec's J1/J2 worked example
         mgr = self._run([j1, j2], _TwoConcurrentSlow)
