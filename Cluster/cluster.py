@@ -152,9 +152,6 @@ class Cluster:
         logging.info(f"t = {self.env.now}, job {job.short_print()} completed")
         for node_id, num_xpu in job.allocation.items():
             self.nodes[node_id].free(num_xpu)
-        # TODO: this method is called when a job completes at the theorectical completion
-        # time. The actual completion time may be ahead or behind if we model failures or
-        # runtime dynamics. Need to refactor this class to handle such cases.
 
     def numNodes(self) -> int:
         """
