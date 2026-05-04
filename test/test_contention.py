@@ -75,6 +75,40 @@ class TestApplySlowdown(unittest.TestCase):
         self.assertEqual(job.current_slowdown, 2.0)
         self.assertEqual(job.last_event_time_sec, 7)
 
+    def test_speedup_advances_work_faster_than_wall(self):
+        """A slowdown < 1.0 (speedup) advances ideal work faster than wall time.
+        Spec Section 8 explicitly admits this case as mathematically valid."""
+        job = make_job(uuid=1, duration_sec=10)
+        job.applySlowdown(1.0, 0)            # baseline rate
+        job.applySlowdown(0.5, 4)            # speedup: 1 wall sec = 2 ideal sec
+        self.assertEqual(job.work_done_ideal_sec, 4)
+        # Remaining ideal = 6, at s=0.5 → 6*0.5 = 3 wall sec to finish from t=4.
+        self.assertEqual(job.priority, 7)
+        job.applySlowdown(1.0, 6)            # back to baseline
+        # In the [4,6] window at s=0.5, work += 2/0.5 = 4 ideal. Total = 8.
+        self.assertEqual(job.work_done_ideal_sec, 8)
+        self.assertEqual(job.priority, 8)    # 6 + (10-8)*1.0
+
+    def test_contention_fields_excluded_from_equality(self):
+        """The three contention-tracking fields use compare=False, so two jobs
+        differing only in those fields must still compare equal. SortedList
+        correctness depends on this invariant — silently breakable by removing
+        the compare=False annotations."""
+        j1 = make_job(uuid=1, duration_sec=10)
+        j2 = make_job(uuid=1, duration_sec=10)
+        self.assertEqual(j1, j2)
+        # Mutate the contention fields on j1 directly (do NOT call
+        # applySlowdown, which would also mutate priority — priority IS in
+        # the equality comparison).
+        j1.work_done_ideal_sec = 3.5
+        j1.last_event_time_sec = 7
+        j1.current_slowdown = 2.0
+        self.assertEqual(
+            j1, j2,
+            "contention-tracking fields must use compare=False; SortedList "
+            "ordering depends on this."
+        )
+
 
 class TestContentionModel(unittest.TestCase):
     def setUp(self):
@@ -119,6 +153,58 @@ class TestContentionModel(unittest.TestCase):
             logging.debug("sentinel")
             model.recompute(jobs)
         self.assertFalse(any("slowdown 2.0 -> 2.0" in m for m in cm.output))
+
+    def test_recompute_empty_queue_is_noop(self):
+        """recompute on an empty list must not raise. This path is exercised
+        by completeOnCluster when the last running job exits."""
+        # Just must not raise. No assertion needed beyond "did not blow up."
+        self.model.recompute([])
+
+    def test_recompute_isclose_guard_suppresses_jitter(self):
+        """When a slowdown function returns FP-jittered factors that are
+        math.isclose to the prior value, no debug log should fire. Today's
+        identity stub returns the literal 1.0, but a real model will produce
+        FP-derived factors — this guards against log spam."""
+
+        class JitterModel(ContentionModel):
+            def __init__(self, env, cluster):
+                super().__init__(env, cluster)
+                self.calls = 0
+
+            def slowdown(self, running_jobs):
+                self.calls += 1
+                # First call sets factor to 2.0; second returns 2.0 + 1e-15
+                # (math.isclose with default tolerances treats them as equal).
+                factor = 2.0 if self.calls == 1 else 2.0 + 1e-15
+                return {j.uuid: factor for j in running_jobs}
+
+        model = JitterModel(self.env, self.cluster)
+        jobs = [make_job(uuid=1, duration_sec=10)]
+
+        # First call: 1.0 -> 2.0, far from close, expect a slowdown-change log.
+        with self.assertLogs(level="DEBUG") as cm:
+            model.recompute(jobs)
+        self.assertTrue(any("slowdown" in m for m in cm.output))
+
+        # Second call: 2.0 -> 2.0 + 1e-15, math.isclose(default) = True,
+        # so NO slowdown-change log should fire.
+        with self.assertLogs(level="DEBUG") as cm:
+            logging.debug("sentinel")
+            model.recompute(jobs)
+        self.assertFalse(any("slowdown" in m for m in cm.output))
+
+    def test_recompute_calls_applySlowdown_exactly_once_per_job(self):
+        """recompute must invoke Job.applySlowdown exactly once per running
+        job, regardless of factor changes. Spy-based check that closes a
+        gap left by test_recompute_updates_all_running_jobs (which only
+        verifies the effect, not the call count)."""
+        jobs = [make_job(uuid=i, duration_sec=10) for i in (1, 2, 3)]
+        with patch.object(Job, "applySlowdown", autospec=True) as spy:
+            self.model.recompute(jobs)
+        self.assertEqual(spy.call_count, 3)
+        # autospec=True means the first positional arg is the Job instance.
+        called_uuids = [call.args[0].uuid for call in spy.call_args_list]
+        self.assertEqual(sorted(called_uuids), [1, 2, 3])
 
 
 class _TwoConcurrentSlow(ContentionModel):
@@ -226,6 +312,57 @@ class TestClusterManagerContention(unittest.TestCase):
         self.assertAlmostEqual(mgr.job_stats[1].completion_time_sec, 6)
         self.assertAlmostEqual(mgr.job_stats[1].jct_sec, 6)
         self.assertAlmostEqual(mgr.job_stats[2].jct_sec, 2)
+
+    def test_three_concurrent_jobs_2x(self):
+        """Three jobs admitted in sequence, all slowed 2x while ≥2 are running.
+        Verifies contention state propagates correctly across multiple admit
+        and complete events with more than two jobs in flight.
+
+        Trajectory under _TwoConcurrentSlow (s=2.0 when ≥2 jobs run):
+          t=0: J1 admitted alone, s=1, priority=10.
+          t=2: J2 admitted, s=2 for both.
+              J1.work=2, priority=18.  J2.priority=10.
+          t=4: J3 admitted, s=2 for all three.
+              J1.work=3, priority=18.  J2.work=1, priority=10.  J3.priority=8.
+          t=8: J3 completes. 2 jobs left, s=2 still.
+              J1.work=5, priority=18.  J2.work=3, priority=10.
+          t=10: J2 completes. 1 job, s=1.
+              J1.work=6, priority=14.
+          t=14: J1 completes.
+        """
+        jobs = [
+            _make_alloc_job(uuid=1, duration_sec=10, arrival_time_sec=0, node="n1"),
+            _make_alloc_job(uuid=2, duration_sec=4, arrival_time_sec=2, node="n2"),
+            _make_alloc_job(uuid=3, duration_sec=2, arrival_time_sec=4, node="n3"),
+        ]
+        mgr = self._run(jobs, _TwoConcurrentSlow)
+        self.assertAlmostEqual(mgr.job_stats[3].completion_time_sec, 8)
+        self.assertAlmostEqual(mgr.job_stats[2].completion_time_sec, 10)
+        self.assertAlmostEqual(mgr.job_stats[1].completion_time_sec, 14)
+        self.assertAlmostEqual(mgr.job_stats[3].jct_sec, 4)   # 8 - 4
+        self.assertAlmostEqual(mgr.job_stats[2].jct_sec, 8)   # 10 - 2
+        self.assertAlmostEqual(mgr.job_stats[1].jct_sec, 14)  # 14 - 0
+
+    def test_admit_reorders_running_queue_head(self):
+        """Identity stub: a later-arriving short job ends up at the head of
+        the running queue ahead of the earlier-arriving long job. Exercises
+        the SortedList rebuild and the guard interrupt path under reordering.
+        If the rebuild were skipped (or the interrupt suppressed), J2's
+        completion event would be missed and the test would hang or fail."""
+        jobs = [
+            _make_alloc_job(uuid=1, duration_sec=20, arrival_time_sec=0, node="n1"),
+            _make_alloc_job(uuid=2, duration_sec=2, arrival_time_sec=5, node="n2"),
+        ]
+        mgr = self._run(jobs, ContentionModel)
+        # J2 admitted at t=5 with dur=2 → completes at t=7 (head of queue,
+        # ahead of J1's t=20 ETA).
+        self.assertAlmostEqual(mgr.job_stats[2].completion_time_sec, 7)
+        self.assertAlmostEqual(mgr.job_stats[1].completion_time_sec, 20)
+        self.assertLess(
+            mgr.job_stats[2].completion_time_sec,
+            mgr.job_stats[1].completion_time_sec,
+            "later-arriving short job must complete before earlier long job",
+        )
 
 
 if __name__ == "__main__":
