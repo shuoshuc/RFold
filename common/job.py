@@ -65,6 +65,21 @@ class Job:
     wait_on_resource_sec: Optional[float] = field(default=0, compare=False)
     # ----- end of stats -----
 
+    # ----- contention model state -----
+    # Ideal work completed so far (in seconds of ideal duration). Advances at rate
+    # 1/current_slowdown per wall-clock second between events. Capped at duration_sec.
+    work_done_ideal_sec: float = field(default=0.0, compare=False)
+    # Wall-clock time at which work_done_ideal_sec was last updated. None until the
+    # job is admitted and its first slowdown is applied. Used to compute the elapsed
+    # wall time delta when a new slowdown factor arrives.
+    last_event_time_sec: Optional[float] = field(default=None, compare=False)
+    # The slowdown factor in effect for this job since last_event_time_sec.
+    # 1.0 = no contention, > 1.0 = the job runs slower (e.g., 2.0 means 1 wall sec
+    # advances 0.5 sec of ideal work). Recomputed by ContentionModel on each
+    # admit/complete event.
+    current_slowdown: float = field(default=1.0, compare=False)
+    # ----- end of contention model state -----
+
     def __post_init__(self):
         self.priority = self.arrival_time_sec
 
@@ -120,6 +135,23 @@ class Job:
         # Clean up the reject reason and last reject time since the job has started execution.
         self.reject_reason = None
         self.last_reject_time = None
+
+    def applySlowdown(self, new_slowdown: float, current_time: float):
+        """
+        Tell this job its slowdown for the next period.
+        1) Accrue ideal work done since the last event at the prior factor.
+        2) Store the new factor and the current time.
+        3) Update self.priority to the projected ETA = now + remaining_ideal * new_s.
+        """
+        if self.last_event_time_sec is not None:
+            elapsed_wall = current_time - self.last_event_time_sec
+            self.work_done_ideal_sec += elapsed_wall / self.current_slowdown
+        # Clamp against floating-point overshoot.
+        self.work_done_ideal_sec = min(self.work_done_ideal_sec, self.duration_sec)
+        self.last_event_time_sec = current_time
+        self.current_slowdown = new_slowdown
+        remaining_ideal = self.duration_sec - self.work_done_ideal_sec
+        self.priority = current_time + remaining_ideal * new_slowdown
 
 
 @dataclass(order=True)
