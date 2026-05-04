@@ -185,8 +185,9 @@ class ClusterManager:
                 logging.debug(f"t = {self.env.now}, {job.short_print()} completed")
                 self.completeOnCluster(job)
             except simpy.Interrupt:
-                # The timer was interrupted, meaning a new running job with earlier
-                # completion time was enqueued.
+                # The timer was interrupted because the placement set changed
+                # (admit). The head of the running queue may now point to a
+                # different job, or the same job with a shifted ETA.
                 logging.debug(f"t = {self.env.now}, runningQueueGuard interrupted")
 
     def schedule(self) -> Generator[simpy.events.Event, None, None]:

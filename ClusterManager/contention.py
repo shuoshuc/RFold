@@ -1,4 +1,5 @@
 import logging
+import math
 import simpy
 from typing import Iterable
 
@@ -44,7 +45,10 @@ class ContentionModel:
             old_s = job.current_slowdown
             new_s = factors[job.uuid]
             job.applySlowdown(new_s, self.env.now)
-            if old_s != new_s:
+            # math.isclose avoids spurious log spam when a real (non-stub)
+            # slowdown function returns FP-derived factors that differ only
+            # in the last bit (e.g., 1.9999999999998 vs 2.0).
+            if not math.isclose(old_s, new_s):
                 logging.debug(
                     f"t = {self.env.now}, Job {job.uuid} slowdown "
                     f"{old_s} -> {new_s}, new ETA {job.priority}"
