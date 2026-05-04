@@ -119,5 +119,106 @@ class TestContentionModel(unittest.TestCase):
         self.assertFalse(any("slowdown 2.0 -> 2.0" in m for m in cm.output))
 
 
+import copy
+from unittest.mock import patch
+
+from common.flags import FLAGS
+from ClusterManager.manager import ClusterManager
+from ClusterManager.scheduling import SchedDecision
+
+
+class _TwoConcurrentSlow(ContentionModel):
+    """Slowdown 2.0 whenever 2+ jobs are running, 1.0 otherwise."""
+    def slowdown(self, running_jobs):
+        jobs = list(running_jobs)
+        s = 2.0 if len(jobs) >= 2 else 1.0
+        return {j.uuid: s for j in jobs}
+
+
+class _AlwaysTwoX(ContentionModel):
+    """Slowdown 2.0 for every running job, regardless of count."""
+    def slowdown(self, running_jobs):
+        return {j.uuid: 2.0 for j in running_jobs}
+
+
+def _make_alloc_job(uuid: int, duration_sec: float, arrival_time_sec: float, node: str) -> Job:
+    job = Job(
+        uuid=uuid,
+        topology=TopoType.CLOS,
+        shape=(1,),
+        size=1,
+        duration_sec=duration_sec,
+        arrival_time_sec=arrival_time_sec,
+    )
+    job.allocation = {node: 1}
+    return job
+
+
+class TestClusterManagerContention(unittest.TestCase):
+    """Integration tests: full simpy + ClusterManager + injected ContentionModel."""
+
+    def _run(self, jobs, model_cls):
+        """Drive the manager end-to-end with a mocked Cluster and the given contention model."""
+        env = simpy.Environment()
+        mock_cluster = MagicMock(spec=Cluster)
+        # Total new work check uses closed_loop_threshold=0 (disabled).
+        mgr = ClusterManager(env, cluster=mock_cluster, sim_njobs=len(jobs))
+        mgr.contention_model = model_cls(env, mock_cluster)
+
+        def feeder():
+            for j in jobs:
+                yield env.timeout(j.arrival_time_sec - env.now)
+                mgr.submitJob(j)
+
+        with patch(
+            "ClusterManager.scheduling.SchedulingPolicy.place",
+            side_effect=lambda j: (SchedDecision.ADMIT, j),
+        ):
+            sched_proc = env.process(mgr.schedule())
+            env.process(feeder())
+            # Note: schedule() blocks indefinitely on event_arrival when
+            # the new-job queue empties, so env.run(until=sched_proc) cannot
+            # terminate. env.run() (no until) instead drains all scheduled
+            # events and returns once nothing is pending.
+            env.run()
+
+        return mgr
+
+    def test_identity_baseline(self):
+        """Identity stub: jct equals duration_sec for every job."""
+        jobs = [
+            _make_alloc_job(uuid=1, duration_sec=4, arrival_time_sec=0, node="n1"),
+            _make_alloc_job(uuid=2, duration_sec=3, arrival_time_sec=10, node="n2"),
+        ]
+        mgr = self._run(jobs, ContentionModel)
+        self.assertAlmostEqual(mgr.job_stats[1].jct_sec, 4)
+        self.assertAlmostEqual(mgr.job_stats[1].slowdown, 1.0)
+        self.assertAlmostEqual(mgr.job_stats[2].jct_sec, 3)
+        self.assertAlmostEqual(mgr.job_stats[2].slowdown, 1.0)
+
+    def test_fixed_2x_doubles_jct_when_alone(self):
+        """A constant 2x slowdown stretches each non-overlapping job's JCT to 2*duration."""
+        jobs = [
+            _make_alloc_job(uuid=1, duration_sec=4, arrival_time_sec=0, node="n1"),
+            # Arrives well after the first one would finish even at 2x.
+            _make_alloc_job(uuid=2, duration_sec=3, arrival_time_sec=20, node="n2"),
+        ]
+        mgr = self._run(jobs, _AlwaysTwoX)
+        self.assertAlmostEqual(mgr.job_stats[1].jct_sec, 8)   # 4 * 2
+        self.assertAlmostEqual(mgr.job_stats[2].jct_sec, 6)   # 3 * 2
+
+    def test_J1_J2_end_to_end(self):
+        """The worked example: J1 dur=5 alone, J2 dur=2 arrives at t=1, both run at 2x while overlapping.
+        Expected: J2 completes at t=3, J1 completes at t=6.
+        """
+        j1 = _make_alloc_job(uuid=1, duration_sec=5, arrival_time_sec=0, node="n1")
+        j2 = _make_alloc_job(uuid=2, duration_sec=2, arrival_time_sec=1, node="n2")
+        mgr = self._run([j1, j2], _TwoConcurrentSlow)
+        self.assertAlmostEqual(mgr.job_stats[2].completion_time_sec, 3)
+        self.assertAlmostEqual(mgr.job_stats[1].completion_time_sec, 6)
+        self.assertAlmostEqual(mgr.job_stats[1].jct_sec, 6)
+        self.assertAlmostEqual(mgr.job_stats[2].jct_sec, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

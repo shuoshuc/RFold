@@ -8,6 +8,7 @@ from common.job import Job
 from common.flags import FLAGS
 from common.utils import Signal
 from ClusterManager.scheduling import SchedulingPolicy, SchedDecision
+from ClusterManager.contention import ContentionModel
 
 
 class SortedList:
@@ -72,6 +73,10 @@ class ClusterManager:
         # The scheduling policy module makes scheduling decisions given the
         # cluster state and a job.
         self.scheduler = SchedulingPolicy(env, cluster)
+        # The contention model recomputes per-job slowdowns whenever the
+        # placement set changes (job admitted or completed) and pushes new
+        # factors onto each running Job via Job.applySlowdown.
+        self.contention_model = ContentionModel(env, cluster)
         # A queue of newly arrived jobs, sorted by arrival times.
         # [Producer]: WorkloadGen module
         # [Consumer]: schedule()
@@ -268,31 +273,42 @@ class ClusterManager:
     def executeOnCluster(self, job: Job):
         """
         Send the job to the cluster for execution. Timestamp the job with the scheduled
-        time and move it to the running queue for continuous tracking.
+        time, register its initial contention state, and move it to the running queue
+        for continuous tracking. Recompute slowdowns for all running jobs (the
+        placement set has just changed) and re-sort the running queue accordingly.
         """
         # Scheduled time = time when the job is executed.
         job.updateQueueingTime(self.env.now)
-        # Once a job is scheduled, its priority changes from arrival time to desired
-        # completion time.
+        # Initialize contention-tracking state for this brand-new running job.
+        # The recompute below will set last_event_time_sec and the real slowdown,
+        # then overwrite priority via applySlowdown.
+        job.work_done_ideal_sec = 0.0
+        job.last_event_time_sec = None
+        job.current_slowdown = 1.0
+        # Placeholder priority; recompute below overwrites it.
         job.priority = self.env.now + job.duration_sec
         self.cluster.execute(job)
         # Move the running job into the running queue.
         self.new_job_queue.remove(job)
         self.running_job_queue.enqueue(job)
-        if self.next_completion > self.env.now and job.priority < self.next_completion:
-            # This job has an earlier completion time than the existing (future)
-            # completion time. Interrupt the running queue guard to restart the timer.
+        # Placement set changed: recompute for every running job (including the
+        # new one), then re-sort so the head reflects the new earliest ETA.
+        self.contention_model.recompute(self.running_job_queue.slist)
+        self._rebuildRunningQueue()
+        # Wake the guard. If it was on a timer, interrupt it; if it was waiting
+        # for a job to be enqueued, signal arrival. We always interrupt under
+        # the recompute model because any running job's ETA may have changed.
+        if self.next_completion > self.env.now:
             self.running_guard_proc.interrupt()
         else:
-            # If the existing completion time is in the past, or the new job completes
-            # after the existing completion time, it is a normal enqueue, no interrupt.
             self.event_running.trigger()
         self.logClusterStats()
 
     def completeOnCluster(self, job: Job):
         """
-        Send the completing job to the cluster to free up resources. Job statistics
-        are also updated.
+        Send the completing job to the cluster to free up resources. Update the
+        job's stats. Recompute slowdowns for the remaining running jobs (their
+        contention landscape just changed) and re-sort the running queue.
         """
         self.cluster.complete(job)
         # Update job statistics.
@@ -300,6 +316,12 @@ class ClusterManager:
         job.jct_sec = self.env.now - job.arrival_time_sec
         job.slowdown = job.jct_sec / job.duration_sec
         self.job_stats[job.uuid] = job
+        # Placement set changed: refresh the remaining running jobs.
+        self.contention_model.recompute(self.running_job_queue.slist)
+        self._rebuildRunningQueue()
+        # No guard interrupt needed: completeOnCluster is invoked from inside
+        # the guard's own loop; the guard naturally peeks the (re-sorted) head
+        # on its next iteration.
         # Notify the main schedule loop.
         self.event_completion.trigger()
         self.logClusterStats()
@@ -333,6 +355,17 @@ class ClusterManager:
                 len(self.running_job_queue.slist),
             )
         )
+
+    def _rebuildRunningQueue(self):
+        """
+        Re-sort the running queue after contention_model.recompute mutated
+        job.priority. SortedList sorts on insert via Job's order=True
+        comparator, so we have to dequeue everything and re-insert.
+        """
+        items = list(self.running_job_queue.slist)
+        self.running_job_queue.slist.clear()
+        for j in items:
+            self.running_job_queue.enqueue(j)
 
     def shouldGiveUp(self, job: Job) -> bool:
         """
