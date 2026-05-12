@@ -645,3 +645,44 @@ class TestScheduling(unittest.TestCase):
         for x in range(1, 3):
             for y in range(0, 8):
                 self.assertIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))
+
+    def test_reconfig_t2d_rank_order_within_full_block(self):
+        """
+        Verify that _reconfig populates ranks in x-fastest order within a chunk.
+        For a job that fits inside a single rsize x rsize full block at the
+        block's lower corner, rank k must map to (k % rsize, k // rsize) within
+        that block. This locks the "x-fastest within a chunk" rule for the
+        reconfig path.
+        """
+        rsize = 4
+        job = Job(
+            uuid=99,
+            topology=TopoType.T2D,
+            shape=(rsize, rsize),
+            size=rsize * rsize,
+            duration_sec=1000,
+            arrival_time_sec=0,
+        )
+        self.mock_cluster.topo = TopoType.T2D
+        self.mock_cluster.totalIdleXPU.return_value = job.size
+        self.mock_cluster.totalIdleNodes.return_value = job.size
+        self.mock_cluster.dimx = rsize
+        self.mock_cluster.dimy = rsize
+        self.mock_cluster.dimz = None
+        self.mock_cluster.blocks = {(0, 0): [object()] * (rsize * rsize)}
+        self.mock_cluster.toBlockArray.return_value = np.ones((rsize, rsize))
+
+        decision, scheduled = self.sched.place(
+            job, policy="reconfig", rsize=rsize
+        )
+
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(scheduled.allocation), rsize * rsize)
+        # x-fastest within the (4, 4) full_block at origin (0, 0).
+        for k in range(rsize * rsize):
+            lx, ly = k % rsize, k // rsize
+            self.assertEqual(
+                scheduled.allocation[k]["node"],
+                f"x{lx}-y{ly}",
+                msg=f"rank {k} should map to (x={lx}, y={ly})",
+            )
