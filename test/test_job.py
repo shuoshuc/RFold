@@ -1,6 +1,6 @@
 import unittest
 
-from common.job import enumerate_xmajor
+from common.job import Job, TopoType, enumerate_xmajor
 
 
 class TestEnumerateXMajor(unittest.TestCase):
@@ -44,9 +44,6 @@ class TestEnumerateXMajor(unittest.TestCase):
         self.assertEqual(len(coords), 3 * 4 * 5)
         # All unique.
         self.assertEqual(len(set(coords)), 3 * 4 * 5)
-
-
-from common.job import Job, TopoType
 
 
 def _make_job(uuid=1):
