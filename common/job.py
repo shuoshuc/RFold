@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 from enum import Enum
+from itertools import product
 from math import ceil
-from typing import Tuple, Optional, Union, TypedDict
+from typing import Iterator, Tuple, Optional, Union, TypedDict
 
 from common.flags import FLAGS
 
@@ -175,6 +176,31 @@ class Subjob:
 
     def __post_init__(self):
         self.completion_time_sec = self.sched_time_sec + self.duration_sec
+
+
+def enumerate_xmajor(
+    extents: Tuple[int, ...],
+    origin: Optional[Tuple[int, ...]] = None,
+) -> Iterator[Tuple[int, ...]]:
+    """
+    Yield N-D coordinates over a box of the given extents in x-fastest
+    row-major order (first dim varies fastest, then second, then third).
+
+    For extents (sx, sy, sz):
+      (0,0,0), (1,0,0), ..., (sx-1,0,0),
+      (0,1,0), ..., (sx-1,sy-1,0),
+      ...,
+      (sx-1, sy-1, sz-1)
+
+    If `origin` is given, each yielded coord is offset by `origin`.
+    """
+    if origin is None:
+        origin = tuple(0 for _ in extents)
+    # itertools.product enumerates the last arg fastest. Pass extents reversed
+    # and reverse each yielded tuple to flip to x-fastest.
+    for rev in product(*[range(e) for e in reversed(extents)]):
+        coord = rev[::-1]
+        yield tuple(c + o for c, o in zip(coord, origin))
 
 
 def SplitShape(shape: str, topo: TopoType) -> Tuple[Union[float, int], ...]:
