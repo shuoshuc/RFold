@@ -686,3 +686,46 @@ class TestScheduling(unittest.TestCase):
                 f"x{lx}-y{ly}",
                 msg=f"rank {k} should map to (x={lx}, y={ly})",
             )
+
+    def test_slurm_hilbert_t2d_rank_follows_hilbert_traversal(self):
+        """
+        Verify that _slurm_hilbert assigns ranks in Hilbert-curve order: rank k
+        corresponds to the node at the k-th Hilbert index of the picked window.
+        """
+        from hilbert import decode as hdecode
+
+        job = Job(
+            uuid=7,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=1000,
+            arrival_time_sec=0,
+        )
+        self.mock_cluster.topo = TopoType.T2D
+        self.mock_cluster.totalIdleXPU.return_value = job.size
+        self.mock_cluster.totalIdleNodes.return_value = job.size
+        self.mock_cluster.dimx = 4
+        self.mock_cluster.dimy = 4
+        self.mock_cluster.dimz = None
+        self.mock_cluster.bits_per_dim = 2  # log2(4)
+        # Pick a contiguous Hilbert window: indices 3, 4, 5, 6.
+        avail_indices = [3, 4, 5, 6]
+        self.mock_cluster.linearAvail.return_value = avail_indices
+
+        decision, scheduled = self.sched.place(job, policy="slurm_hilbert")
+
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(scheduled.allocation), 4)
+        # rank k corresponds to the k-th Hilbert index of avail_indices.
+        for k, index in enumerate(avail_indices):
+            x, y = hdecode(index, 2, self.mock_cluster.bits_per_dim)[0]
+            expected = f"x{x % self.mock_cluster.dimx}-y{y % self.mock_cluster.dimy}"
+            self.assertEqual(
+                scheduled.allocation[k]["node"],
+                expected,
+                msg=(
+                    f"rank {k} (Hilbert index {index}) should map to "
+                    f"{expected}"
+                ),
+            )
