@@ -102,6 +102,43 @@ class TestScheduling(unittest.TestCase):
         for x, y in coords:
             self.assertIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))
 
+    def test_first_fit_t2d_rank_is_x_fastest(self):
+        """
+        Verify that _firstfit assigns logical ranks in x-fastest row-major order
+        over the (permuted) shape. For shape (2, 3) placed at corner (0, 0) on
+        an entirely free 4x4 torus, rank k must map to the node at coord
+        (k % 2, k // 2). This pins the spec's x-fastest convention end-to-end.
+        """
+        job = Job(
+            uuid=42,
+            topology=TopoType.T2D,
+            shape=(2, 3),
+            size=6,
+            duration_sec=1000,
+            arrival_time_sec=0,
+        )
+        self.mock_cluster.topo = TopoType.T2D
+        self.mock_cluster.totalIdleXPU.return_value = job.size
+        self.mock_cluster.totalIdleNodes.return_value = job.size
+        self.mock_cluster.dimx = 4
+        self.mock_cluster.dimy = 4
+        self.mock_cluster.dimz = None
+        # All 16 nodes free; firstfit picks the corner (0, 0).
+        self.mock_cluster.toArray.return_value = np.ones((4, 4))
+
+        decision, scheduled = self.sched.place(job, policy="firstfit")
+
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        self.assertEqual(len(scheduled.allocation), 6)
+        # x-fastest over shape (2, 3): k % 2 = x, k // 2 = y.
+        for k in range(6):
+            x, y = k % 2, k // 2
+            self.assertEqual(
+                scheduled.allocation[k]["node"],
+                f"x{x}-y{y}",
+                msg=f"rank {k} should map to (x={x}, y={y})",
+            )
+
     def test_first_fit_t3d(self):
         """
         Verify the behavior when using firstfit as the policy in 3D torus.
