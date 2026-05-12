@@ -687,6 +687,113 @@ class TestScheduling(unittest.TestCase):
                 msg=f"rank {k} should map to (x={lx}, y={ly})",
             )
 
+    def test_reconfig_t2d_rank_order_across_chunks(self):
+        """
+        Verify that _reconfig emits ranks across chunks in
+        _reconfig_param_map insertion order (full_block, partial_x,
+        partial_y, corner for 2D). For shape (rsize+1, rsize+1) with rsize=4,
+        chunks are: full_block (4x4), partial_x (1x4), partial_y (4x1),
+        corner (1x1). Each chunk's internal ordering is x-fastest. This
+        locks the cross-chunk ordering rule that spec section 2.2 documents.
+        """
+        rsize = 4
+        # Shape (5, 5) on a cluster with four separate blocks ensures every
+        # chunk type is exercised: full_block (4x4), partial_x (1x4),
+        # partial_y (4x1), corner (1x1) — each placed in a distinct block.
+        shape = (rsize + 1, rsize + 1)
+        job = Job(
+            uuid=101,
+            topology=TopoType.T2D,
+            shape=shape,
+            size=shape[0] * shape[1],
+            duration_sec=1000,
+            arrival_time_sec=0,
+        )
+        self.mock_cluster.topo = TopoType.T2D
+        self.mock_cluster.totalIdleXPU.return_value = job.size
+        self.mock_cluster.totalIdleNodes.return_value = job.size
+        # Four blocks, each rsize x rsize. Block coords: (0,0), (1,0), (0,1), (1,1).
+        self.mock_cluster.dimx = 2 * rsize
+        self.mock_cluster.dimy = 2 * rsize
+        self.mock_cluster.dimz = None
+        self.mock_cluster.blocks = {
+            (0, 0): [object()] * (rsize * rsize),
+            (1, 0): [object()] * (rsize * rsize),
+            (0, 1): [object()] * (rsize * rsize),
+            (1, 1): [object()] * (rsize * rsize),
+        }
+        # Every block reports fully idle.
+        self.mock_cluster.toBlockArray.return_value = np.ones((rsize, rsize))
+
+        decision, scheduled = self.sched.place(
+            job, policy="reconfig", rsize=rsize
+        )
+
+        self.assertEqual(decision, SchedDecision.ADMIT)
+        # Verify exactly job.size ranks were assigned (no duplicates).
+        self.assertEqual(len(scheduled.allocation), job.size)
+        self.assertEqual(set(scheduled.allocation.keys()), set(range(job.size)))
+
+        # Partition the ranks into the chunk-size segments expected by the
+        # _reconfig_param_map ordering: full_block, partial_x, partial_y, corner.
+        chunk_sizes = [
+            rsize * rsize,  # full_block
+            1 * rsize,      # partial_x (partial_x=1, rsize)
+            rsize * 1,      # partial_y (rsize, partial_y=1)
+            1 * 1,          # corner
+        ]
+        boundaries = []
+        cursor = 0
+        for sz in chunk_sizes:
+            boundaries.append((cursor, cursor + sz))
+            cursor += sz
+        self.assertEqual(cursor, job.size)
+
+        # Each chunk's ranks must have unique node names — i.e. ranks
+        # within a chunk should not collide. Across chunks names differ
+        # because the chunks live in different blocks.
+        for (start, end) in boundaries:
+            names_in_chunk = [
+                scheduled.allocation[k]["node"]
+                for k in range(start, end)
+            ]
+            self.assertEqual(
+                len(set(names_in_chunk)),
+                end - start,
+                msg=(
+                    f"chunk ranks {start}..{end - 1} must be distinct nodes; "
+                    f"got {names_in_chunk}"
+                ),
+            )
+
+        # Confirm the full_block chunk's ranks are in x-fastest order within
+        # whichever (rsize x rsize) block it landed in. Extract the (lx, ly)
+        # offsets from the node names and verify they trace the expected
+        # x-fastest sequence regardless of which block coord prefix appears.
+        full_block_names = [
+            scheduled.allocation[k]["node"]
+            for k in range(boundaries[0][0], boundaries[0][1])
+        ]
+        # All full_block nodes share the same (bx, by) block prefix in their
+        # global coord, so the local offsets within the block must be
+        # (0,0),(1,0),(2,0),(3,0),(0,1),... — the x-fastest sequence.
+        # Derive local offsets via dimx, dimy modulo rsize.
+        def _local(name: str) -> tuple:
+            # name format: "xN-yM"
+            parts = name.split("-")
+            return (int(parts[0][1:]) % rsize, int(parts[1][1:]) % rsize)
+
+        expected_locals = [(lx, ly) for ly in range(rsize) for lx in range(rsize)]
+        actual_locals = [_local(n) for n in full_block_names]
+        self.assertEqual(
+            actual_locals,
+            expected_locals,
+            msg=(
+                "full_block ranks must enumerate the (rsize x rsize) block "
+                f"in x-fastest order; got {actual_locals}"
+            ),
+        )
+
     def test_slurm_hilbert_t2d_rank_follows_hilbert_traversal(self):
         """
         Verify that _slurm_hilbert assigns ranks in Hilbert-curve order: rank k
