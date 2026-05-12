@@ -9,7 +9,7 @@ from typing import Optional, Generator
 from itertools import permutations, combinations, product
 
 from common.flags import FLAGS
-from common.job import Job, TopoType
+from common.job import Job, TopoType, enumerate_xmajor
 from Cluster.cluster import Cluster
 from ClusterManager.torus import (
     real_shape_dimension,
@@ -133,13 +133,12 @@ class SchedulingPolicy:
             if not loc:
                 continue
             job.shape = shape
-            for coord in product(
-                *[range(base, base + offset) for base, offset in zip(loc, shape)]
-            ):
+            for coord in enumerate_xmajor(shape, origin=loc):
                 wrapped_coord = tuple((c % d) for c, d in zip(coord, dims))
-                job.allocation[
-                    "-".join([f"{p}{c}" for p, c in zip(prefix, wrapped_coord)])
-                ] = 1
+                node_name = "-".join(
+                    f"{p}{c}" for p, c in zip(prefix, wrapped_coord)
+                )
+                job.addToAllocation(node_name)
             return SchedDecision.ADMIT, job
 
         logging.debug(f"Job {job.uuid} rejected, no feasible placement found.")
@@ -178,14 +177,12 @@ class SchedulingPolicy:
             ]
             if subarray.size > 0 and np.all(subarray > 0):
                 blocks_to_allocate.append(block_coord)
-                for local_coord in product(
-                    *[range(l, l + p) for l, p in zip(loc, partial)]
-                ):
+                for local_coord in enumerate_xmajor(partial, origin=loc):
                     global_coord = tuple(
                         b * rsize + l for b, l in zip(block_coord, local_coord)
                     )
                     nodes_to_allocate.append(
-                        "-".join([f"{p}{g}" for p, g in zip(prefix, global_coord)])
+                        "-".join(f"{p}{g}" for p, g in zip(prefix, global_coord))
                     )
         return (blocks_to_allocate, nodes_to_allocate)
 
@@ -342,8 +339,8 @@ class SchedulingPolicy:
                         for block_coord in blocks_to_alloc:
                             allocated.add(block_coord)
                             candidates.remove(block_coord)
-                            for node in nodes_to_alloc:
-                                job.allocation[node] = 1
+                        for node in nodes_to_alloc:
+                            job.addToAllocation(node)
                         break
 
             # Check if there are enough blocks to satisfy the job shape.
@@ -425,9 +422,25 @@ class SchedulingPolicy:
             if block_coords:
                 logging.debug(f"Candidate block coordinates: {block_coords}")
                 for coord in block_coords[:-1]:
-                    for node in self.cluster.blocks[coord]:
+                    # x-fastest enumeration over the block's coord box, so
+                    # the rank assignment within each chunk follows the spec
+                    # convention. Missing coords (sparse blocks) are skipped.
+                    block_nodes = {n.name: n for n in self.cluster.blocks[coord]}
+                    block_origin = tuple(c * rsize for c in coord)
+                    block_extents = (rsize,) * len(coord)
+                    block_prefix = ("x", "y", "z")[: len(coord)]
+                    for node_coord in enumerate_xmajor(
+                        block_extents, origin=block_origin
+                    ):
+                        node_name = "-".join(
+                            f"{p}{c}"
+                            for p, c in zip(block_prefix, node_coord)
+                        )
+                        node = block_nodes.get(node_name)
+                        if node is None:
+                            continue
                         if node.numIdleXPU() > 0:
-                            job.allocation[node.name] = 1
+                            job.addToAllocation(node.name)
                 last_block = {**used_blocks_avail, **empty_blocks_avail}[block_coords[-1]]
                 for i in reversed(range(last_block.ndim)):
                     logging.debug(
@@ -446,9 +459,10 @@ class SchedulingPolicy:
                         logging.debug(f"Found path: {path}")
                         for node_coord in path:
                             prefix = ("x", "y", "z")[: len(node_coord)]
-                            job.allocation[
-                                "-".join([f"{p}{c}" for p, c in zip(prefix, node_coord)])
-                            ] = 1
+                            node_name = "-".join(
+                                f"{p}{c}" for p, c in zip(prefix, node_coord)
+                            )
+                            job.addToAllocation(node_name)
                         return SchedDecision.ADMIT, job
                     else:
                         logging.info(f"[WARNING] No folded path found: job {job.uuid}")
@@ -538,17 +552,19 @@ class SchedulingPolicy:
                 if job.topology in (TopoType.MESH2D, TopoType.T2D):
                     x, y = hdecode(index, 2, self.cluster.bits_per_dim)[0]
                     # Make sure to handle wrap-around indices for torus.
-                    job.allocation[
+                    node_name = (
                         f"x{x % self.cluster.dimx}-y{y % self.cluster.dimy}"
-                    ] = 1
+                    )
+                    job.addToAllocation(node_name)
                 elif job.topology in (TopoType.MESH3D, TopoType.T3D_NT, TopoType.T3D_T):
                     x, y, z = hdecode(index, 3, self.cluster.bits_per_dim)[0]
                     # Make sure to handle wrap-around indices for torus.
-                    job.allocation[
+                    node_name = (
                         f"x{x % self.cluster.dimx}-"
                         f"y{y % self.cluster.dimy}-"
                         f"z{z % self.cluster.dimz}"
-                    ] = 1
+                    )
+                    job.addToAllocation(node_name)
             return SchedDecision.ADMIT, job
 
         job.logRejectReason(self.env.now, "shape")

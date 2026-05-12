@@ -230,7 +230,7 @@ def _make_alloc_job(uuid: int, duration_sec: float, arrival_time_sec: float, nod
         duration_sec=duration_sec,
         arrival_time_sec=arrival_time_sec,
     )
-    job.allocation = {node: 1}
+    job.allocation = {0: {"node": node, "num_xpu": 1}}
     return job
 
 

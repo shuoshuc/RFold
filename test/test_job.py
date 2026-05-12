@@ -46,5 +46,50 @@ class TestEnumerateXMajor(unittest.TestCase):
         self.assertEqual(len(set(coords)), 3 * 4 * 5)
 
 
+from common.job import Job, TopoType
+
+
+def _make_job(uuid=1):
+    return Job(
+        uuid=uuid,
+        topology=TopoType.T2D,
+        shape=(1,),
+        size=1,
+        duration_sec=10.0,
+        arrival_time_sec=0.0,
+    )
+
+
+class TestAddToAllocation(unittest.TestCase):
+
+    def test_first_call_assigns_rank_zero(self):
+        job = _make_job()
+        job.addToAllocation("x0-y0")
+        self.assertEqual(job.allocation, {0: {"node": "x0-y0", "num_xpu": 1}})
+
+    def test_ranks_count_up_densely(self):
+        job = _make_job()
+        for name in ("x0-y0", "x1-y0", "x0-y1"):
+            job.addToAllocation(name)
+        self.assertEqual(list(job.allocation.keys()), [0, 1, 2])
+
+    def test_default_num_xpu_is_one(self):
+        job = _make_job()
+        job.addToAllocation("x0-y0")
+        self.assertEqual(job.allocation[0]["num_xpu"], 1)
+
+    def test_explicit_num_xpu_is_recorded(self):
+        job = _make_job()
+        job.addToAllocation("x0-y0", num_xpu=4)
+        self.assertEqual(job.allocation[0]["num_xpu"], 4)
+
+    def test_reset_then_append_restarts_at_rank_zero(self):
+        job = _make_job()
+        job.addToAllocation("x0-y0")
+        job.allocation = {}
+        job.addToAllocation("x1-y0")
+        self.assertEqual(job.allocation, {0: {"node": "x1-y0", "num_xpu": 1}})
+
+
 if __name__ == "__main__":
     unittest.main()

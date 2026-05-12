@@ -339,7 +339,7 @@ class TestClusterManagerWithFcfs(unittest.TestCase):
         # Job1_sched is the scheduled job.
         job1_sched = copy.deepcopy(JOB1)
         job1_sched.duration_sec = 10
-        job1_sched.allocation = {"n1": 1}
+        job1_sched.allocation = {0: {"node": "n1", "num_xpu": 1}}
         with patch(
             "ClusterManager.scheduling.SchedulingPolicy.place",
             side_effect=[

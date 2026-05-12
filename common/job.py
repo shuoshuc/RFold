@@ -6,8 +6,8 @@ from typing import Iterator, Tuple, Optional, Union, TypedDict
 
 from common.flags import FLAGS
 
-# Definition of type Allocation: it is a dict.
-Allocation = TypedDict("Allocation", {"node": str, "num_xpu": Union[int, float]})
+# One physical placement record carried by Job.allocation as a value.
+AllocEntry = TypedDict("AllocEntry", {"node": str, "num_xpu": Union[int, float]})
 
 
 class TopoType(Enum):
@@ -45,8 +45,10 @@ class Job:
     sched_time_sec: Optional[float] = None
     # Job completion time stamp.
     completion_time_sec: Optional[float] = None
-    # Detailed allocation provided after a scheduling decision (admit or similar) is made.
-    allocation: Optional[Allocation] = field(default_factory=dict)
+    # Maps logical rank -> physical placement. Logical rank is a dense int
+    # in [0, size). Within a single chunk/submesh ranks are x-fastest;
+    # across chunks they follow the scheduler's chunk-processing order.
+    allocation: dict[int, AllocEntry] = field(default_factory=dict)
     # ----- end of allocation info -----
 
     # ----- stats -----
@@ -83,6 +85,15 @@ class Job:
 
     def __post_init__(self):
         self.priority = self.arrival_time_sec
+
+    def addToAllocation(
+        self, node_name: str, num_xpu: Union[int, float] = 1
+    ) -> None:
+        """Append a placement with the next sequential logical rank."""
+        self.allocation[len(self.allocation)] = {
+            "node": node_name,
+            "num_xpu": num_xpu,
+        }
 
     def short_print(self):
         return (

@@ -101,7 +101,10 @@ class TestClusterSimple(unittest.TestCase):
         # The cluster right now is completely idle.
         self.assertTrue((self.cluster.toArray() == np.full((4, 4), 1)).all())
         # Allocate 1 XPU from node 1 and 2 to the job.
-        job.allocation = {C1_NODE1: 1, C1_NODE2: 1}
+        job.allocation = {
+            0: {"node": C1_NODE1, "num_xpu": 1},
+            1: {"node": C1_NODE2, "num_xpu": 1},
+        }
         # Fix and execute the job with correct shape.
         job.shape = (1, 1)
         job.size = 2
@@ -122,7 +125,10 @@ class TestClusterSimple(unittest.TestCase):
         job = copy.deepcopy(JOB)
         job.shape = (1, 1)
         job.size = 2
-        job.allocation = {C1_NODE1: 1, C1_NODE2: 1}
+        job.allocation = {
+            0: {"node": C1_NODE1, "num_xpu": 1},
+            1: {"node": C1_NODE2, "num_xpu": 1},
+        }
         self.cluster.execute(job)
         # Node 1 and 2 each has 0 idle XPU, node 3 has 1 idle XPU.
         self.assertIn(C1_NODE1, self.cluster.allNodes())
@@ -150,7 +156,10 @@ class TestClusterSimple(unittest.TestCase):
         job = copy.deepcopy(JOB)
         job.shape = (1, 1)
         job.size = 2
-        job.allocation = {C1_NODE1: 1, C1_NODE2: 1}
+        job.allocation = {
+            0: {"node": C1_NODE1, "num_xpu": 1},
+            1: {"node": C1_NODE2, "num_xpu": 1},
+        }
         self.cluster.execute(job)
         # Node 1 and 2 each has 0 idle XPU, node 3 has 1 idle XPU.
         self.assertIn(C1_NODE1, self.cluster.allNodes())
@@ -160,7 +169,10 @@ class TestClusterSimple(unittest.TestCase):
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE2), 0)
         self.assertEqual(self.cluster.getIdleXPU(C1_NODE3), 1)
         # Malicious allocation info tries to over-free resources.
-        job.allocation = {C1_NODE1: 3, C1_NODE2: 3}
+        job.allocation = {
+            0: {"node": C1_NODE1, "num_xpu": 3},
+            1: {"node": C1_NODE2, "num_xpu": 3},
+        }
         # This triggers an exception from the underlying nodes.
         self.assertRaises(ValueError, self.cluster.complete, job)
 

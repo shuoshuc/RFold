@@ -9,6 +9,12 @@ from Cluster.cluster import Cluster
 from Cluster.topology import Node
 from ClusterManager.scheduling import SchedDecision, SchedulingPolicy
 
+
+def _alloc_node_names(job) -> set[str]:
+    """Return the set of physical node names placed in the job's allocation."""
+    return {entry["node"] for entry in job.allocation.values()}
+
+
 JOB = Job(
     uuid=1,
     topology=TopoType.CLOS,
@@ -90,11 +96,11 @@ class TestScheduling(unittest.TestCase):
         decision, job_to_sched = self.sched.place(job, policy="firstfit")
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 4)
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure firstfit pick the first feasible allocation.
         for x, y in coords:
-            self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)
+            self.assertIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))
 
     def test_first_fit_t3d(self):
         """
@@ -146,13 +152,13 @@ class TestScheduling(unittest.TestCase):
         decision, job_to_sched = self.sched.place(job, policy="firstfit")
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 6)
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure firstfit pick the first feasible allocation.
         for x in range(1):
             for y in range(2):
                 for z in [0, 1, 3]:
-                    self.assertIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+                    self.assertIn(f"x{x}-y{y}-z{z}", _alloc_node_names(job_to_sched))
 
     def test_slurm_hilbert_t2d(self):
         """
@@ -200,11 +206,11 @@ class TestScheduling(unittest.TestCase):
         decision, job_to_sched = self.sched.place(job, policy="slurm_hilbert")
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 4)
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure slurm_hilbert picks the best feasible allocation, namely [3, 4, 5, 6].
         for x, y in coords:
-            self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)
+            self.assertIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))
 
         # [Admitted case 2] first fit with equally small range.
         job_to_sched.allocation.clear()
@@ -215,11 +221,11 @@ class TestScheduling(unittest.TestCase):
         decision, job_to_sched = self.sched.place(job, policy="slurm_hilbert")
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 4)
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure slurm_hilbert picks the best feasible allocation, namely [1, 2, 3, 4].
         for x, y in coords:
-            self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)
+            self.assertIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))
 
     def test_slurm_hilbert_t3d(self):
         """
@@ -267,11 +273,11 @@ class TestScheduling(unittest.TestCase):
         decision, job_to_sched = self.sched.place(job, policy="slurm_hilbert")
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 6)
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure slurm_hilbert picks the best feasible allocation, namely [3-8].
         for x, y, z in coords:
-            self.assertIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+            self.assertIn(f"x{x}-y{y}-z{z}", _alloc_node_names(job_to_sched))
 
         # [Admitted case 2] first fit with equally small range.
         job_to_sched.allocation.clear()
@@ -289,11 +295,11 @@ class TestScheduling(unittest.TestCase):
         decision, job_to_sched = self.sched.place(job, policy="slurm_hilbert")
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 6)
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure slurm_hilbert picks the first feasible allocation, namely [1-6].
         for x, y, z in coords:
-            self.assertIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+            self.assertIn(f"x{x}-y{y}-z{z}", _alloc_node_names(job_to_sched))
 
     def test_reconfig_t2d(self):
         """
@@ -352,11 +358,11 @@ class TestScheduling(unittest.TestCase):
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 60)
         self.assertEqual(job.shape, (4, 15))
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure the four nodes are not allocated.
         for x, y in [(4, 7), (5, 7), (6, 7), (7, 7)]:
-            self.assertNotIn(f"x{x}-y{y}", job_to_sched.allocation)
+            self.assertNotIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))
 
         job.shape = (12, 1)
         job.size = 12
@@ -394,11 +400,11 @@ class TestScheduling(unittest.TestCase):
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 4)
         self.assertEqual(job.shape, (2, 2))
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure the four nodes at the bottom right corner are allocated.
         for x, y in [(6, 6), (6, 7), (7, 6), (7, 7)]:
-            self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)
+            self.assertIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))
 
     def test_reconfig_t3d(self):
         """
@@ -470,13 +476,13 @@ class TestScheduling(unittest.TestCase):
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 29 * 4 * 4)
         self.assertEqual(job.shape, (29, 4, 4))
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure the four nodes are not allocated.
         for x in range(5, 8):
             for y in range(4, 8):
                 for z in range(4, 8):
-                    self.assertNotIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+                    self.assertNotIn(f"x{x}-y{y}-z{z}", _alloc_node_names(job_to_sched))
 
         job.shape = (8, 1, 4)
         job.size = 32
@@ -515,16 +521,16 @@ class TestScheduling(unittest.TestCase):
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 8)
         self.assertEqual(job.shape, (2, 2, 2))
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         # Make sure the four nodes at the bottom right corner are allocated.
         for x in range(6, 8):
             for y in range(6, 8):
                 for z in range(6, 8):
-                    self.assertIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+                    self.assertIn(f"x{x}-y{y}-z{z}", _alloc_node_names(job_to_sched))
         # Other nodes should not be allocated.
         for x, y, z in [(0, 0, 0), (1, 1, 1)]:
-            self.assertNotIn(f"x{x}-y{y}-z{z}", job_to_sched.allocation)
+            self.assertNotIn(f"x{x}-y{y}-z{z}", _alloc_node_names(job_to_sched))
 
     def test_folding_2d(self):
         """
@@ -584,11 +590,11 @@ class TestScheduling(unittest.TestCase):
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 16)
         self.assertEqual(job.shape, (1, 16))
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         for x in range(1, 3):
             for y in range(0, 8):
-                self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)
+                self.assertIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))
 
         # Job of shape (2, 8) does not require OCS links.
         job.shape = (2, 8)
@@ -597,8 +603,8 @@ class TestScheduling(unittest.TestCase):
         self.assertEqual(decision, SchedDecision.ADMIT)
         self.assertEqual(len(job_to_sched.allocation), 16)
         self.assertEqual(job.shape, (2, 8))
-        for val in job_to_sched.allocation.values():
-            self.assertEqual(val, 1)
+        for entry in job_to_sched.allocation.values():
+            self.assertEqual(entry["num_xpu"], 1)
         for x in range(1, 3):
             for y in range(0, 8):
-                self.assertIn(f"x{x}-y{y}", job_to_sched.allocation)
+                self.assertIn(f"x{x}-y{y}", _alloc_node_names(job_to_sched))

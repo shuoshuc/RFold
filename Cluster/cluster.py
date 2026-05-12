@@ -142,16 +142,16 @@ class Cluster:
         logging.info(f"t = {self.env.now}, executing job {job.short_print()}")
         if not job.allocation:
             raise ValueError(f"Job {job.uuid} allocation info is missing.")
-        for node_id, num_xpu in job.allocation.items():
-            self.nodes[node_id].alloc(num_xpu)
+        for entry in job.allocation.values():
+            self.nodes[entry["node"]].alloc(entry["num_xpu"])
 
     def complete(self, job: Job):
         """
         Handle a job's completion. Free up the resources allocated to the job.
         """
         logging.info(f"t = {self.env.now}, job {job.short_print()} completed")
-        for node_id, num_xpu in job.allocation.items():
-            self.nodes[node_id].free(num_xpu)
+        for entry in job.allocation.values():
+            self.nodes[entry["node"]].free(entry["num_xpu"])
 
     def numNodes(self) -> int:
         """
