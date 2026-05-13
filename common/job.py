@@ -94,6 +94,8 @@ class Job:
 
     def __post_init__(self):
         self.priority = self.arrival_time_sec
+        # T3D_NT and T3D_T share this branch because twist affects physical
+        # wiring, not the logical-rank ring pattern.
         if self.topology in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
             # Torus shapes are integer in this codebase; coerce defensively
             # since the shape tuple is typed as Union[float, int].
@@ -105,8 +107,9 @@ class Job:
         """
         Return the directed ring communication pattern over logical ranks.
 
-        Raises ValueError if this job's topology has no defined pattern
-        (mesh and Clos topologies).
+        Returns an empty list for torus jobs whose shape is fully degenerate
+        (every axis has size 1). Raises ValueError if this job's topology
+        has no defined pattern (mesh and Clos topologies).
         """
         if self._comm_pattern is None:
             raise ValueError(
