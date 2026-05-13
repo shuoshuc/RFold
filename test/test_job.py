@@ -1,3 +1,4 @@
+import math
 import unittest
 from collections import Counter
 from dataclasses import fields
@@ -198,14 +199,11 @@ class TestAddToAllocation(unittest.TestCase):
 class TestJobCommPattern(unittest.TestCase):
 
     def _job(self, topology, shape):
-        size = 1
-        for s in shape:
-            size *= s
         return Job(
             uuid=1,
             topology=topology,
             shape=shape,
-            size=size,
+            size=math.prod(shape),
             duration_sec=10.0,
             arrival_time_sec=0.0,
         )
@@ -238,9 +236,11 @@ class TestJobCommPattern(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             job.getCommPattern()
         # Error message names the topology so consumers can debug.
-        self.assertIn("MESH2D", str(ctx.exception) + repr(ctx.exception))
+        self.assertIn("MESH2D", str(ctx.exception))
 
     def test_mesh3d_access_raises(self):
+        # Message-format coverage lives in the MESH2D test; this and the
+        # CLOS test only confirm that ValueError is the raised type.
         job = self._job(TopoType.MESH3D, (2, 2, 2))
         with self.assertRaises(ValueError):
             job.getCommPattern()

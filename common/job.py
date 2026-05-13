@@ -52,7 +52,9 @@ class Job:
     # Directed ring communication pattern over logical ranks. Populated in
     # __post_init__ for torus topologies (T2D, T3D_NT, T3D_T); left None
     # otherwise. Access via getCommPattern() to get a clear error for jobs
-    # whose topology has no defined pattern.
+    # whose topology has no defined pattern. Sits inside the allocation
+    # block because it needs a default, and non-default fields must
+    # precede defaulted ones in the dataclass declaration order.
     _comm_pattern: Optional[list[Tuple[int, int]]] = field(
         default=None, init=False, compare=False, repr=False
     )
