@@ -1,5 +1,6 @@
 import unittest
 from collections import Counter
+from dataclasses import fields
 
 from common.job import (
     Job,
@@ -249,23 +250,17 @@ class TestJobCommPattern(unittest.TestCase):
         with self.assertRaises(ValueError):
             job.getCommPattern()
 
-    def test_comm_pattern_does_not_break_ordering(self):
-        # _comm_pattern is compare=False, so two T2D jobs with the same
-        # arrival_time (and therefore same priority) compare equal under
-        # the dataclass ordering even when their shapes — and thus their
-        # patterns — differ.
-        a = Job(
-            uuid=1, topology=TopoType.T2D, shape=(4, 2), size=8,
-            duration_sec=10.0, arrival_time_sec=0.0,
-        )
-        b = Job(
-            uuid=1, topology=TopoType.T2D, shape=(2, 2), size=4,
-            duration_sec=10.0, arrival_time_sec=0.0,
-        )
-        # @dataclass(order=True) makes "not less-than in either direction"
-        # the equivalent of "equal sort key" for fields with compare=True.
-        self.assertFalse(a < b)
-        self.assertFalse(b < a)
+    def test_comm_pattern_field_is_excluded_from_ordering(self):
+        # Direct test of the contract: _comm_pattern carries compare=False
+        # so it never participates in the dataclass-generated <, ==, >
+        # methods. We can't demonstrate this via two Job instances because
+        # _comm_pattern is derived deterministically from shape, and shape
+        # is itself a compare=True field — so any pair of jobs with
+        # different patterns also has a different shape, which dominates
+        # the comparison. Inspect the field metadata instead.
+        field_map = {f.name: f for f in fields(Job)}
+        self.assertIn("_comm_pattern", field_map)
+        self.assertFalse(field_map["_comm_pattern"].compare)
 
 
 if __name__ == "__main__":
