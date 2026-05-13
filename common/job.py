@@ -214,6 +214,54 @@ def enumerate_xmajor(
         yield tuple(c + o for c, o in zip(coord, origin))
 
 
+def compute_ring_comm_pattern(
+    shape: Tuple[int, ...],
+) -> list[Tuple[int, int]]:
+    """
+    Build the directed ring communication pattern over logical ranks for a
+    torus job of the given shape.
+
+    Ranks are x-fastest:
+      rank(c0, c1, ..., c_{n-1}) = c0 + c1*shape[0] + c2*shape[0]*shape[1] + ...
+
+    For each axis d in 0..ndim-1, for every fiber along axis d (every fixed
+    assignment of the remaining coords), emit forward ring edges:
+      (rank_k, rank_{(k+1) mod shape[d]})  for k = 0 .. shape[d]-1
+
+    Edges are listed dim-major (all axis-0 edges, then axis-1, ...). Within
+    an axis, fibers are visited in lowest-remaining-index-fastest order
+    (matches enumerate_xmajor on the projected shape).
+
+    A degenerate axis (shape[d] == 1) contributes no edges (no self-loops).
+    """
+    ndim = len(shape)
+    # strides[d] = product(shape[0..d-1]), so rank = sum(c_d * strides[d]).
+    strides = [1] * ndim
+    for d in range(1, ndim):
+        strides[d] = strides[d - 1] * shape[d - 1]
+
+    edges: list[Tuple[int, int]] = []
+    for d in range(ndim):
+        s_d = shape[d]
+        if s_d <= 1:
+            continue
+        remaining_axes = [a for a in range(ndim) if a != d]
+        remaining_extents = [shape[a] for a in remaining_axes]
+        # itertools.product enumerates the last arg fastest. Reverse the
+        # extents so the lowest remaining index varies fastest, then reverse
+        # each yielded tuple back to original order.
+        for rev in product(*[range(e) for e in reversed(remaining_extents)]):
+            fiber_coords = rev[::-1]
+            base_rank = 0
+            for axis, coord in zip(remaining_axes, fiber_coords):
+                base_rank += coord * strides[axis]
+            for k in range(s_d):
+                src = base_rank + k * strides[d]
+                dst = base_rank + ((k + 1) % s_d) * strides[d]
+                edges.append((src, dst))
+    return edges
+
+
 def SplitShape(shape: str, topo: TopoType) -> Tuple[Union[float, int], ...]:
     """
     Splits the given shape string into a tuple of integers or floats.
