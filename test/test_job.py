@@ -1,4 +1,5 @@
 import unittest
+from collections import Counter
 
 from common.job import (
     Job,
@@ -108,6 +109,14 @@ class TestComputeRingCommPattern(unittest.TestCase):
             [(0, 1), (1, 2), (2, 3), (3, 0)],
         )
 
+    def test_3d_shape_3x1x5_middle_degenerate_axis(self):
+        # Axis 1 is degenerate (size 1); only axis 0 and axis 2 emit edges.
+        # 2 non-degenerate axes * 15 ranks = 30 edges.
+        edges = compute_ring_comm_pattern((3, 1, 5))
+        self.assertEqual(len(edges), 30)
+        # No self-loops introduced by the degenerate axis.
+        self.assertFalse(any(src == dst for src, dst in edges))
+
     def test_3d_shape_2x2x2_first_axis2_edge(self):
         edges = compute_ring_comm_pattern((2, 2, 2))
         # 3 axes * 8 ranks = 24 edges total.
@@ -124,14 +133,23 @@ class TestComputeRingCommPattern(unittest.TestCase):
         self.assertEqual(len(edges), 3 * 4 * 5 * 3)
 
     def test_all_ranks_within_shape(self):
-        # Every src/dst falls inside [0, prod(shape)).
+        # On a fully non-degenerate 3D shape, every src/dst falls inside
+        # [0, prod(shape)); every rank appears as a source exactly ndim
+        # times (one outgoing edge per axis); and no edge is duplicated.
         shape = (3, 4, 5)
         size = 3 * 4 * 5
-        for src, dst in compute_ring_comm_pattern(shape):
+        ndim = len(shape)
+        edges = compute_ring_comm_pattern(shape)
+        for src, dst in edges:
             self.assertGreaterEqual(src, 0)
             self.assertLess(src, size)
             self.assertGreaterEqual(dst, 0)
             self.assertLess(dst, size)
+        # Out-degree per rank == ndim.
+        src_counts = Counter(src for src, _ in edges)
+        self.assertEqual(src_counts, Counter({r: ndim for r in range(size)}))
+        # No duplicate edges.
+        self.assertEqual(len(edges), len(set(edges)))
 
 
 def _make_job(uuid=1):
