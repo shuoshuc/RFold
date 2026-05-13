@@ -55,7 +55,7 @@ class Job:
     # whose topology has no defined pattern. Sits inside the allocation
     # block because it needs a default, and non-default fields must
     # precede defaulted ones in the dataclass declaration order.
-    _comm_pattern: Optional[list[Tuple[int, int]]] = field(
+    _comm_pattern: Optional[list[Tuple[int, int, float]]] = field(
         default=None, init=False, compare=False, repr=False
     )
     # ----- end of allocation info -----
@@ -103,7 +103,7 @@ class Job:
                 tuple(int(s) for s in self.shape)
             )
 
-    def getCommPattern(self) -> list[Tuple[int, int]]:
+    def getCommPattern(self) -> list[Tuple[int, int, float]]:
         """
         Return the directed ring communication pattern over logical ranks.
 
@@ -247,7 +247,7 @@ def enumerate_xmajor(
 
 def compute_ring_comm_pattern(
     shape: Tuple[int, ...],
-) -> list[Tuple[int, int]]:
+) -> list[Tuple[int, int, float]]:
     """
     Build the directed ring communication pattern over logical ranks for a
     torus job of the given shape.
@@ -271,7 +271,7 @@ def compute_ring_comm_pattern(
     for d in range(1, ndim):
         strides[d] = strides[d - 1] * shape[d - 1]
 
-    edges: list[Tuple[int, int]] = []
+    edges: list[Tuple[int, int, float]] = []
     for d in range(ndim):
         s_d = shape[d]
         if s_d <= 1:
@@ -289,7 +289,7 @@ def compute_ring_comm_pattern(
             for k in range(s_d):
                 src = base_rank + k * strides[d]
                 dst = base_rank + ((k + 1) % s_d) * strides[d]
-                edges.append((src, dst))
+                edges.append((src, dst, 1.0))
     return edges
 
 

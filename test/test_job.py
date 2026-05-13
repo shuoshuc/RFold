@@ -59,7 +59,7 @@ class TestComputeRingCommPattern(unittest.TestCase):
     def test_1d_size_four_is_single_forward_ring(self):
         self.assertEqual(
             compute_ring_comm_pattern((4,)),
-            [(0, 1), (1, 2), (2, 3), (3, 0)],
+            [(0, 1, 1.0), (1, 2, 1.0), (2, 3, 1.0), (3, 0, 1.0)],
         )
 
     def test_1d_size_one_is_empty(self):
@@ -68,32 +68,33 @@ class TestComputeRingCommPattern(unittest.TestCase):
 
     def test_1d_size_two_is_bidirectional_ring(self):
         # Forward ring of size 2 naturally emits both directions:
-        # (0 -> 1) and (1 -> 0).
+        # (0 -> 1) and (1 -> 0). Volume is 1.0 on every edge.
         self.assertEqual(
             compute_ring_comm_pattern((2,)),
-            [(0, 1), (1, 0)],
+            [(0, 1, 1.0), (1, 0, 1.0)],
         )
 
     def test_2d_shape_4x2_matches_spec_example(self):
         # Worked example from the spec. Ranks are x-fastest:
         #   rank(c0, c1) = c0 + c1 * shape[0]
         # Order: all axis-0 edges first (fibers y=0, then y=1), then all
-        # axis-1 edges (fibers x=0, x=1, x=2, x=3).
+        # axis-1 edges (fibers x=0, x=1, x=2, x=3). Every edge carries
+        # volume 1.0 in this revision.
         self.assertEqual(
             compute_ring_comm_pattern((4, 2)),
             [
                 # axis 0 (x), fiber y=0
-                (0, 1), (1, 2), (2, 3), (3, 0),
+                (0, 1, 1.0), (1, 2, 1.0), (2, 3, 1.0), (3, 0, 1.0),
                 # axis 0 (x), fiber y=1
-                (4, 5), (5, 6), (6, 7), (7, 4),
+                (4, 5, 1.0), (5, 6, 1.0), (6, 7, 1.0), (7, 4, 1.0),
                 # axis 1 (y), fiber x=0
-                (0, 4), (4, 0),
+                (0, 4, 1.0), (4, 0, 1.0),
                 # axis 1 (y), fiber x=1
-                (1, 5), (5, 1),
+                (1, 5, 1.0), (5, 1, 1.0),
                 # axis 1 (y), fiber x=2
-                (2, 6), (6, 2),
+                (2, 6, 1.0), (6, 2, 1.0),
                 # axis 1 (y), fiber x=3
-                (3, 7), (7, 3),
+                (3, 7, 1.0), (7, 3, 1.0),
             ],
         )
 
@@ -101,14 +102,14 @@ class TestComputeRingCommPattern(unittest.TestCase):
         edges = compute_ring_comm_pattern((3, 3))
         # 2 axes * 9 ranks = 18 edges total.
         self.assertEqual(len(edges), 18)
-        # First three edges = axis-0 fiber y=0: (0,1),(1,2),(2,0).
-        self.assertEqual(edges[:3], [(0, 1), (1, 2), (2, 0)])
+        # First three edges = axis-0 fiber y=0: (0,1,1.0),(1,2,1.0),(2,0,1.0).
+        self.assertEqual(edges[:3], [(0, 1, 1.0), (1, 2, 1.0), (2, 0, 1.0)])
 
     def test_2d_shape_4x1_skips_degenerate_axis(self):
         # Axis 1 has size 1; only axis-0 ring edges are emitted.
         self.assertEqual(
             compute_ring_comm_pattern((4, 1)),
-            [(0, 1), (1, 2), (2, 3), (3, 0)],
+            [(0, 1, 1.0), (1, 2, 1.0), (2, 3, 1.0), (3, 0, 1.0)],
         )
 
     def test_3d_shape_3x1x5_middle_degenerate_axis(self):
@@ -117,7 +118,7 @@ class TestComputeRingCommPattern(unittest.TestCase):
         edges = compute_ring_comm_pattern((3, 1, 5))
         self.assertEqual(len(edges), 30)
         # No self-loops introduced by the degenerate axis.
-        self.assertFalse(any(src == dst for src, dst in edges))
+        self.assertFalse(any(src == dst for src, dst, _ in edges))
 
     def test_3d_shape_2x2x2_first_axis2_edge(self):
         edges = compute_ring_comm_pattern((2, 2, 2))
@@ -126,7 +127,7 @@ class TestComputeRingCommPattern(unittest.TestCase):
         # 8 axis-0 edges + 8 axis-1 edges precede axis-2, so edges[16] is the
         # first axis-2 edge. First axis-2 fiber is at (x=0, y=0): rank 0 ->
         # rank at (0,0,1) = 0 + 0*2 + 1*4 = 4.
-        self.assertEqual(edges[16], (0, 4))
+        self.assertEqual(edges[16], (0, 4, 1.0))
 
     def test_3d_shape_3x4x5_total_edge_count(self):
         edges = compute_ring_comm_pattern((3, 4, 5))
@@ -137,21 +138,37 @@ class TestComputeRingCommPattern(unittest.TestCase):
     def test_all_ranks_within_shape(self):
         # On a fully non-degenerate 3D shape, every src/dst falls inside
         # [0, prod(shape)); every rank appears as a source exactly ndim
-        # times (one outgoing edge per axis); and no edge is duplicated.
+        # times (one outgoing edge per axis); and no (src, dst) pair is
+        # duplicated. The volume column is uniform 1.0 in this revision
+        # and is ignored by these structural checks.
         shape = (3, 4, 5)
         size = 3 * 4 * 5
         ndim = len(shape)
         edges = compute_ring_comm_pattern(shape)
-        for src, dst in edges:
+        for src, dst, _ in edges:
             self.assertGreaterEqual(src, 0)
             self.assertLess(src, size)
             self.assertGreaterEqual(dst, 0)
             self.assertLess(dst, size)
         # Out-degree per rank == ndim.
-        src_counts = Counter(src for src, _ in edges)
+        src_counts = Counter(src for src, _, _ in edges)
         self.assertEqual(src_counts, Counter({r: ndim for r in range(size)}))
-        # No duplicate edges.
-        self.assertEqual(len(edges), len(set(edges)))
+        # No duplicate (src, dst) pairs.
+        pairs = [(s, d) for s, d, _ in edges]
+        self.assertEqual(len(pairs), len(set(pairs)))
+
+    def test_every_edge_carries_volume_one(self):
+        # Every emitted edge in this revision has volume exactly 1.0.
+        # Use a 2D shape so both axes contribute edges.
+        edges = compute_ring_comm_pattern((4, 2))
+        self.assertTrue(all(len(e) == 3 for e in edges))
+        self.assertTrue(all(e[2] == 1.0 for e in edges))
+
+    def test_volume_type_is_float(self):
+        # Volume must be a float, not an int. Guards against accidental
+        # int drift (e.g., someone changing 1.0 to 1 in the helper).
+        edges = compute_ring_comm_pattern((4,))
+        self.assertIsInstance(edges[0][2], float)
 
 
 def _make_job(uuid=1):
@@ -214,12 +231,12 @@ class TestJobCommPattern(unittest.TestCase):
         self.assertEqual(
             job.getCommPattern(),
             [
-                (0, 1), (1, 2), (2, 3), (3, 0),
-                (4, 5), (5, 6), (6, 7), (7, 4),
-                (0, 4), (4, 0),
-                (1, 5), (5, 1),
-                (2, 6), (6, 2),
-                (3, 7), (7, 3),
+                (0, 1, 1.0), (1, 2, 1.0), (2, 3, 1.0), (3, 0, 1.0),
+                (4, 5, 1.0), (5, 6, 1.0), (6, 7, 1.0), (7, 4, 1.0),
+                (0, 4, 1.0), (4, 0, 1.0),
+                (1, 5, 1.0), (5, 1, 1.0),
+                (2, 6, 1.0), (6, 2, 1.0),
+                (3, 7, 1.0), (7, 3, 1.0),
             ],
         )
 
