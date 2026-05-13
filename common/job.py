@@ -49,6 +49,13 @@ class Job:
     # in [0, size). Within a single chunk/submesh ranks are x-fastest;
     # across chunks they follow the scheduler's chunk-processing order.
     allocation: dict[int, AllocEntry] = field(default_factory=dict)
+    # Directed ring communication pattern over logical ranks. Populated in
+    # __post_init__ for torus topologies (T2D, T3D_NT, T3D_T); left None
+    # otherwise. Access via getCommPattern() to get a clear error for jobs
+    # whose topology has no defined pattern.
+    _comm_pattern: Optional[list[Tuple[int, int]]] = field(
+        default=None, init=False, compare=False, repr=False
+    )
     # ----- end of allocation info -----
 
     # ----- stats -----
@@ -85,6 +92,25 @@ class Job:
 
     def __post_init__(self):
         self.priority = self.arrival_time_sec
+        if self.topology in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
+            # Torus shapes are integer in this codebase; coerce defensively
+            # since the shape tuple is typed as Union[float, int].
+            self._comm_pattern = compute_ring_comm_pattern(
+                tuple(int(s) for s in self.shape)
+            )
+
+    def getCommPattern(self) -> list[Tuple[int, int]]:
+        """
+        Return the directed ring communication pattern over logical ranks.
+
+        Raises ValueError if this job's topology has no defined pattern
+        (mesh and Clos topologies).
+        """
+        if self._comm_pattern is None:
+            raise ValueError(
+                f"Comm pattern undefined for topology {self.topology}"
+            )
+        return self._comm_pattern
 
     def addToAllocation(
         self, node_name: str, num_xpu: Union[int, float] = 1

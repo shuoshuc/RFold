@@ -194,5 +194,79 @@ class TestAddToAllocation(unittest.TestCase):
         self.assertEqual(job.allocation, {0: {"node": "x1-y0", "num_xpu": 1}})
 
 
+class TestJobCommPattern(unittest.TestCase):
+
+    def _job(self, topology, shape):
+        size = 1
+        for s in shape:
+            size *= s
+        return Job(
+            uuid=1,
+            topology=topology,
+            shape=shape,
+            size=size,
+            duration_sec=10.0,
+            arrival_time_sec=0.0,
+        )
+
+    def test_t2d_4x2_returns_spec_edge_list(self):
+        # Same expected list as the helper test, reached via the accessor.
+        job = self._job(TopoType.T2D, (4, 2))
+        self.assertEqual(
+            job.getCommPattern(),
+            [
+                (0, 1), (1, 2), (2, 3), (3, 0),
+                (4, 5), (5, 6), (6, 7), (7, 4),
+                (0, 4), (4, 0),
+                (1, 5), (5, 1),
+                (2, 6), (6, 2),
+                (3, 7), (7, 3),
+            ],
+        )
+
+    def test_t3d_nt_2x2x2_has_24_edges(self):
+        job = self._job(TopoType.T3D_NT, (2, 2, 2))
+        self.assertEqual(len(job.getCommPattern()), 24)
+
+    def test_t3d_t_2x2x2_has_24_edges(self):
+        job = self._job(TopoType.T3D_T, (2, 2, 2))
+        self.assertEqual(len(job.getCommPattern()), 24)
+
+    def test_mesh2d_construction_succeeds_but_access_raises(self):
+        job = self._job(TopoType.MESH2D, (4, 2))
+        with self.assertRaises(ValueError) as ctx:
+            job.getCommPattern()
+        # Error message names the topology so consumers can debug.
+        self.assertIn("MESH2D", str(ctx.exception) + repr(ctx.exception))
+
+    def test_mesh3d_access_raises(self):
+        job = self._job(TopoType.MESH3D, (2, 2, 2))
+        with self.assertRaises(ValueError):
+            job.getCommPattern()
+
+    def test_clos_access_raises(self):
+        job = self._job(TopoType.CLOS, (1, 1))
+        with self.assertRaises(ValueError):
+            job.getCommPattern()
+
+    def test_comm_pattern_does_not_break_ordering(self):
+        # _comm_pattern is compare=False, so two T2D jobs with the same
+        # arrival_time (and therefore same priority) compare equal under
+        # the dataclass ordering even when their shapes — and thus their
+        # patterns — differ.
+        a = Job(
+            uuid=1, topology=TopoType.T2D, shape=(4, 2), size=8,
+            duration_sec=10.0, arrival_time_sec=0.0,
+        )
+        b = Job(
+            uuid=1, topology=TopoType.T2D, shape=(2, 2), size=4,
+            duration_sec=10.0, arrival_time_sec=0.0,
+        )
+        # @dataclass(order=True) makes "not less-than in either direction"
+        # the equivalent of "equal sort key" for fields with compare=True.
+        self.assertFalse(a < b)
+        self.assertFalse(b < a)
+
+
 if __name__ == "__main__":
     unittest.main()
