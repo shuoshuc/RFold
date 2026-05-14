@@ -135,12 +135,12 @@ class Cluster:
         # Coord -> Node lookup. Populated only for torus topologies; used by
         # _routePath to resolve next-hop neighbors during link-flow accounting.
         self._coord_to_node: dict[tuple[int, ...], Node] = {}
-        if self.topo in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
+        if self.topo == TopoType.T2D:
             for node in self.nodes.values():
-                if self.topo == TopoType.T2D:
-                    self._coord_to_node[(node.dimx, node.dimy)] = node
-                else:
-                    self._coord_to_node[(node.dimx, node.dimy, node.dimz)] = node
+                self._coord_to_node[(node.dimx, node.dimy)] = node
+        elif self.topo in (TopoType.T3D_NT, TopoType.T3D_T):
+            for node in self.nodes.values():
+                self._coord_to_node[(node.dimx, node.dimy, node.dimz)] = node
 
     def execute(self, job: Job):
         """
