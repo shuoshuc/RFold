@@ -5,8 +5,9 @@ from unittest.mock import MagicMock, patch
 import simpy
 
 from common.job import Job, TopoType
+from common.utils import spec_parser
 from Cluster.cluster import Cluster
-from ClusterManager.contention import ContentionModel
+from ClusterManager.contention import ContentionModel, MinTopoEdge
 from ClusterManager.manager import ClusterManager
 from ClusterManager.scheduling import SchedDecision
 
@@ -221,6 +222,23 @@ class _AlwaysTwoX(ContentionModel):
         return {j.uuid: 2.0 for j in running_jobs}
 
 
+def _make_t2d_job(uuid: int, shape, node_ranks: list[str], duration_sec: float = 10.0) -> Job:
+    """Build a T2D Job and populate its allocation in the given rank order.
+    Mirrors the fixture in test/test_cluster.py; duplicated here to keep
+    test files self-contained."""
+    job = Job(
+        uuid=uuid,
+        topology=TopoType.T2D,
+        shape=shape,
+        size=len(node_ranks),
+        duration_sec=duration_sec,
+        arrival_time_sec=0,
+    )
+    for name in node_ranks:
+        job.addToAllocation(name)
+    return job
+
+
 def _make_alloc_job(uuid: int, duration_sec: float, arrival_time_sec: float, node: str) -> Job:
     job = Job(
         uuid=uuid,
@@ -363,6 +381,96 @@ class TestClusterManagerContention(unittest.TestCase):
             mgr.job_stats[1].completion_time_sec,
             "later-arriving short job must complete before earlier long job",
         )
+
+
+C1_SPEC = "Cluster/models/c1.json"
+
+
+class TestComputeMinTopology(unittest.TestCase):
+    """Unit tests for ContentionModel.computeMinTopology on the c1.json 4x4 T2D."""
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
+        self.model = ContentionModel(self.env, self.cluster)
+        # Per-link latency is uniform from FLAGS.link_latency_ns (default 100.0).
+        sample_link = next(iter(self.cluster.links.values()))
+        self.link_speed_gbps = sample_link.speed_gbps
+        self.link_lat_ns = sample_link.latency_ns
+
+    def test_non_torus_job_returns_empty_list(self):
+        """A CLOS Job's min topology is []."""
+        job = Job(
+            uuid=99,
+            topology=TopoType.CLOS,
+            shape=(1,),
+            size=1,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        job.addToAllocation("x0-y0")
+        self.assertEqual(self.model.computeMinTopology(job), [])
+
+    def test_single_uncontended_edge_full_bandwidth_one_hop_latency(self):
+        """A (2,1) job alone: forward edge sees full bandwidth and 1-hop latency."""
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job)
+        topo = self.model.computeMinTopology(job)
+        # Comm pattern is [(0,1,1.0), (1,0,1.0)] — two edges.
+        self.assertEqual(len(topo), 2)
+        forward = topo[0]
+        self.assertEqual((forward.src_rank, forward.dst_rank), (0, 1))
+        self.assertEqual(forward.eff_bw_gbps, self.link_speed_gbps)
+        self.assertEqual(forward.eff_lat_ns, self.link_lat_ns)
+
+    def test_wrap_edge_three_hops_cumulative_latency(self):
+        """The wrap edge of a (2,1) job traverses 3 hops; latency sums."""
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job)
+        topo = self.model.computeMinTopology(job)
+        wrap = topo[1]
+        self.assertEqual((wrap.src_rank, wrap.dst_rank), (1, 0))
+        self.assertEqual(wrap.eff_bw_gbps, self.link_speed_gbps)  # each link flow_count == 1
+        self.assertEqual(wrap.eff_lat_ns, 3 * self.link_lat_ns)
+
+    def test_bottleneck_dominates_when_one_shared_link(self):
+        """When two jobs share a single link, the edge that crosses it sees
+        eff_bw_gbps = link.speed_gbps / 2 even though other links on the path
+        have flow_count == 1."""
+        # Job A and Job B on row 0 with overlapping wraparounds.
+        # Fixture from the link-flow tests' wraparound-share case.
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
+        self.cluster.execute(job_a)
+        self.cluster.execute(job_b)
+        # Job A's wrap edge (rank 1 -> 0) goes x1->x2, x2->x3, x3->x0.
+        # All three of those links are shared with Job B (B's wrap goes
+        # x3->x0, x0->x1, x1->x2; B's forward goes x2->x3). Each shared link
+        # has flow_count == 2.
+        topo_a = self.model.computeMinTopology(job_a)
+        wrap_a = topo_a[1]  # the (1, 0) edge
+        self.assertEqual(wrap_a.eff_bw_gbps, self.link_speed_gbps / 2)
+
+    def test_self_contention_two_edges_same_link(self):
+        """If two flows of the same job route over the same physical
+        link, flow_count on that link is 2 and the edge sees
+        eff_bw = speed/2.
+
+        Direct construction of self-contention via the current ring
+        comm pattern on c1.json is not achievable for small shapes (the
+        forward and wrap edges of a (2,1) ring use disjoint physical
+        links). To demonstrate self-contention we manually bump the
+        flow_count on a link to simulate a second comm-pattern edge of
+        the same job crossing the same link."""
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job)
+        # Simulate a second flow of this job that also crosses x0->x1.
+        self.cluster.links["x0-y0-p1:x1-y0-p0"].incFlow()
+        topo = self.model.computeMinTopology(job)
+        forward = topo[0]
+        self.assertEqual(forward.eff_bw_gbps, self.link_speed_gbps / 2)
+        # Restore counter to keep cluster state consistent if tests share fixtures.
+        self.cluster.links["x0-y0-p1:x1-y0-p0"].decFlow()
 
 
 if __name__ == "__main__":

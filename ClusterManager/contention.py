@@ -1,10 +1,28 @@
 import logging
 import math
 import simpy
+from dataclasses import dataclass
 from typing import Iterable
 
 from common.job import Job
 from Cluster.cluster import Cluster
+
+
+@dataclass(frozen=True)
+class MinTopoEdge:
+    """
+    One edge of a job's minimum topology: the bottleneck-bandwidth and
+    cumulative-latency view of a single (src_rank, dst_rank) comm-pattern pair
+    after the underlying multi-hop path has been collapsed to a single
+    synthetic edge.
+    """
+    src_rank: int
+    dst_rank: int
+    eff_bw_gbps: float
+    eff_lat_ns: float
+
+
+MinTopology = list[MinTopoEdge]
 
 
 class ContentionModel:
@@ -21,6 +39,30 @@ class ContentionModel:
     def __init__(self, env: simpy.core.Environment, cluster: Cluster):
         self.env = env
         self.cluster = cluster
+
+    def computeMinTopology(self, job: Job) -> MinTopology:
+        """
+        Build the minimum-topology view of `job` against the current cluster
+        link-flow state. One MinTopoEdge per comm-pattern edge. Empty list
+        for jobs whose topology has no comm pattern (mesh, Clos).
+
+        For each comm-pattern pair:
+          eff_bw_gbps = min over path links of (link.speed_gbps / link.flow_count)
+          eff_lat_ns  = sum over path links of link.latency_ns
+        """
+        edges: MinTopology = []
+        for src_rank, dst_rank, links in self.cluster.routeJobPaths(job):
+            if not links:
+                # src_rank == dst_rank (degenerate); not produced by the
+                # current ring comm pattern but cheap to handle defensively.
+                edges.append(
+                    MinTopoEdge(src_rank, dst_rank, float("inf"), 0.0)
+                )
+                continue
+            eff_bw = min(l.speed_gbps / l.flow_count for l in links)
+            eff_lat = sum(l.latency_ns for l in links)
+            edges.append(MinTopoEdge(src_rank, dst_rank, eff_bw, eff_lat))
+        return edges
 
     def slowdown(self, running_jobs: Iterable[Job]) -> dict[int, float]:
         """
