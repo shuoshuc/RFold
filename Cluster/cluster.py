@@ -161,6 +161,8 @@ class Cluster:
         Handle a job's completion. Free up the resources allocated to the job.
         """
         logging.info(f"t = {self.env.now}, job {job.short_print()} completed")
+        # Decrement flows BEFORE freeing nodes: if decFlow raises on underflow,
+        # node state stays intact so the operator can diagnose without double-freeing.
         self._updateJobLinkFlows(job, delta=-1)
         for entry in job.allocation.values():
             self.nodes[entry["node"]].free(entry["num_xpu"])
@@ -177,10 +179,14 @@ class Cluster:
             src_node = self.nodes[job.allocation[src_rank]["node"]]
             dst_node = self.nodes[job.allocation[dst_rank]["node"]]
             for link in self._routePath(src_node, dst_node):
-                if delta > 0:
+                if delta == 1:
                     link.incFlow()
-                else:
+                elif delta == -1:
                     link.decFlow()
+                else:
+                    raise ValueError(
+                        f"_updateJobLinkFlows expects delta in (+1, -1); got {delta}"
+                    )
 
     def getLinkFlows(self) -> dict[str, int]:
         """Return {link_name: flow_count} for every link in the cluster."""

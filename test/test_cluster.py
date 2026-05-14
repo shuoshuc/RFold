@@ -25,9 +25,6 @@ C1_NODE1 = "x0-y0"
 C1_NODE2 = "x3-y3"
 C1_NODE3 = "x2-y1"
 
-# Path to cluster C2's spec file. C2 is folded Clos.
-C2_SPEC = "Cluster/models/c2.json"
-
 
 def _make_t2d_job(uuid: int, shape, node_ranks: list[str], duration_sec: float = 10.0):
     """Build a T2D Job and populate its allocation in the given rank order."""
