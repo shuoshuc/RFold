@@ -176,8 +176,14 @@ class Cluster:
         if job.topology not in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
             return
         for src_rank, dst_rank, _vol in job.getCommPattern():
-            src_node = self.nodes[job.allocation[src_rank]["node"]]
-            dst_node = self.nodes[job.allocation[dst_rank]["node"]]
+            try:
+                src_node = self.nodes[job.allocation[src_rank]["node"]]
+                dst_node = self.nodes[job.allocation[dst_rank]["node"]]
+            except KeyError as e:
+                raise ValueError(
+                    f"Job {job.uuid}: comm-pattern rank {e.args[0]} missing from "
+                    f"allocation (allocation size = {len(job.allocation)})."
+                ) from e
             for link in self._routePath(src_node, dst_node):
                 if delta == 1:
                     link.incFlow()
