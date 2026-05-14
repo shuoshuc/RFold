@@ -174,7 +174,7 @@ class Cluster:
         No-op (yields nothing) for jobs without a comm pattern (mesh, Clos).
 
         Raises ValueError if a rank in the comm pattern is missing from
-        job.allocation (same diagnostic as _updateJobLinkFlows previously gave).
+        job.allocation.
         """
         if job.topology not in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
             return

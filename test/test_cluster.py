@@ -446,7 +446,7 @@ class TestRouteJobPaths(unittest.TestCase):
 
     def test_torus_job_yields_one_entry_per_comm_edge(self):
         """A (2, 1) T2D job has 2 comm-pattern edges; routeJobPaths yields 2 tuples
-        whose third element is the link list returned by _routePath."""
+        whose third element is the list of links traversed."""
         job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
         edges = list(self.cluster.routeJobPaths(job))
         # Comm pattern for (2,1) is [(0, 1, 1.0), (1, 0, 1.0)] — two edges.
@@ -466,6 +466,28 @@ class TestRouteJobPaths(unittest.TestCase):
                 "x3-y0-p1:x0-y0-p0",
             ],
         )
+
+    def test_missing_rank_in_allocation_raises_value_error(self):
+        """If a rank referenced by the comm pattern is missing from
+        job.allocation, routeJobPaths raises ValueError naming the rank."""
+        # Build a torus job whose shape generates rank 1 in its comm pattern
+        # but leave its allocation empty (no addToAllocation calls).
+        job = Job(
+            uuid=42,
+            topology=TopoType.T2D,
+            shape=(2, 1),
+            size=2,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        # Allocate only rank 0, leaving rank 1 missing.
+        job.addToAllocation("x0-y0")
+        with self.assertRaises(ValueError) as cm:
+            list(self.cluster.routeJobPaths(job))
+        # The error message should include the job uuid and the missing rank.
+        msg = str(cm.exception)
+        self.assertIn("42", msg)
+        self.assertIn("1", msg)
 
 
 if __name__ == "__main__":
