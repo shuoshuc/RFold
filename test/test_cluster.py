@@ -213,5 +213,73 @@ class TestClusterSimple(unittest.TestCase):
         self.assertEqual(failed_nodes, self.cluster.getFailedNodes())
 
 
+class TestClusterRouting(unittest.TestCase):
+    """Unit tests for Cluster._routePath on the c1.json 4x4 T2D topology."""
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
+
+    def _node(self, name: str):
+        return self.cluster.getNodeByName(name)
+
+    def _link_names(self, links):
+        return [link.name for link in links]
+
+    def test_same_node_returns_empty_path(self):
+        """Routing from a node to itself returns no links."""
+        n = self._node("x0-y0")
+        self.assertEqual(self.cluster._routePath(n, n), [])
+
+    def test_adjacent_plus_x_one_hop(self):
+        """Adjacent +x neighbor: x0-y0 -> x1-y0 traverses 1 link."""
+        path = self.cluster._routePath(self._node("x0-y0"), self._node("x1-y0"))
+        self.assertEqual(self._link_names(path), ["x0-y0-p1:x1-y0-p0"])
+
+    def test_two_hop_plus_x_in_order(self):
+        """Two-hop +x: x0-y0 -> x2-y0 traverses x0->x1 then x1->x2 in order."""
+        path = self.cluster._routePath(self._node("x0-y0"), self._node("x2-y0"))
+        self.assertEqual(
+            self._link_names(path),
+            ["x0-y0-p1:x1-y0-p0", "x1-y0-p1:x2-y0-p0"],
+        )
+
+    def test_single_hop_plus_x_wraparound(self):
+        """+x wrap from x3-y0 -> x0-y0 is exactly one link (the wrap)."""
+        path = self.cluster._routePath(self._node("x3-y0"), self._node("x0-y0"))
+        self.assertEqual(self._link_names(path), ["x3-y0-p1:x0-y0-p0"])
+
+    def test_three_hop_plus_x_never_takes_backward_wrap(self):
+        """x0-y0 -> x3-y0 walks +x three times, never the 1-hop -x wrap."""
+        path = self.cluster._routePath(self._node("x0-y0"), self._node("x3-y0"))
+        self.assertEqual(
+            self._link_names(path),
+            [
+                "x0-y0-p1:x1-y0-p0",
+                "x1-y0-p1:x2-y0-p0",
+                "x2-y0-p1:x3-y0-p0",
+            ],
+        )
+
+    def test_diagonal_routes_x_first_then_y(self):
+        """x0-y0 -> x2-y3 takes 2 +x hops followed by 3 +y hops, in that order."""
+        path = self.cluster._routePath(self._node("x0-y0"), self._node("x2-y3"))
+        self.assertEqual(
+            self._link_names(path),
+            [
+                "x0-y0-p1:x1-y0-p0",
+                "x1-y0-p1:x2-y0-p0",
+                "x2-y0-p3:x2-y1-p2",
+                "x2-y1-p3:x2-y2-p2",
+                "x2-y2-p3:x2-y3-p2",
+            ],
+        )
+
+    def test_pure_plus_y_wraparound(self):
+        """+y wrap from x0-y3 -> x0-y0 is one link (the wrap)."""
+        path = self.cluster._routePath(self._node("x0-y3"), self._node("x0-y0"))
+        self.assertEqual(self._link_names(path), ["x0-y3-p3:x0-y0-p2"])
+
+
 if __name__ == "__main__":
     unittest.main()

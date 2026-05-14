@@ -167,6 +167,44 @@ class Cluster:
         """Return {link_name: flow_count} for every link in the cluster."""
         return {name: link.flow_count for name, link in self.links.items()}
 
+    def _routePath(self, src: Node, dst: Node) -> list[Link]:
+        """
+        Dimension-order route from src to dst on a torus, always advancing in
+        the +direction with wraparound. Returns the list of unidirectional
+        links traversed, in path order. Empty if src is dst.
+
+        Caller guarantees both nodes are torus nodes in this cluster. Raises
+        ValueError if any required next-hop link is missing (e.g., a T3D_T
+        twisted wrap that doesn't match the coord-based neighbor).
+        """
+        if self.topo == TopoType.T2D:
+            dims = [self.dimx, self.dimy]
+            src_coord = (src.dimx, src.dimy)
+            dst_coord = (dst.dimx, dst.dimy)
+        else:
+            dims = [self.dimx, self.dimy, self.dimz]
+            src_coord = (src.dimx, src.dimy, src.dimz)
+            dst_coord = (dst.dimx, dst.dimy, dst.dimz)
+
+        links: list[Link] = []
+        cur = list(src_coord)
+        for axis, axis_dim in enumerate(dims):
+            # Hops needed in +axis direction with wraparound.
+            steps = (dst_coord[axis] - cur[axis]) % axis_dim
+            for _ in range(steps):
+                cur_node = self._coord_to_node[tuple(cur)]
+                cur[axis] = (cur[axis] + 1) % axis_dim
+                next_node = self._coord_to_node[tuple(cur)]
+                edges = self.findLinksBetweenNodes(cur_node, next_node)
+                if not edges:
+                    raise ValueError(
+                        f"No physical link from {cur_node.name} to "
+                        f"{next_node.name}; topology {self.topo.name} may be "
+                        f"unsupported (e.g., T3D_T twist)."
+                    )
+                links.append(edges[0])
+        return links
+
     def numNodes(self) -> int:
         """
         Return the number of nodes in the cluster.
