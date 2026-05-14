@@ -69,9 +69,22 @@ class Link:
         self.speed_gbps = speed_gbps
         # Remaining available capacity on the link.
         self._residual = speed_gbps
+        # Number of concurrent flows currently routed across this link.
+        # Maintained by Cluster.execute / Cluster.complete via incFlow/decFlow.
+        self.flow_count: int = 0
 
     def resetResidual(self):
         self._residual = 0
+
+    def incFlow(self) -> None:
+        self.flow_count += 1
+
+    def decFlow(self) -> None:
+        if self.flow_count <= 0:
+            raise ValueError(
+                f"Link {self.name} flow_count is already 0; cannot decrement."
+            )
+        self.flow_count -= 1
 
 
 class BaseNode(ABC):
