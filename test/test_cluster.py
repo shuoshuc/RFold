@@ -176,6 +176,26 @@ class TestClusterSimple(unittest.TestCase):
         # This triggers an exception from the underlying nodes.
         self.assertRaises(ValueError, self.cluster.complete, job)
 
+    def test_coord_to_node_lookup_is_built_for_torus(self):
+        """T2D cluster builds _coord_to_node mapping every coord -> Node."""
+        # 4x4 grid -> 16 entries, each (dimx, dimy) maps to the node at that coord.
+        self.assertEqual(len(self.cluster._coord_to_node), 16)
+        node_x0_y0 = self.cluster._coord_to_node[(0, 0)]
+        self.assertEqual(node_x0_y0.name, "x0-y0")
+        self.assertEqual(node_x0_y0.dimx, 0)
+        self.assertEqual(node_x0_y0.dimy, 0)
+        node_x3_y3 = self.cluster._coord_to_node[(3, 3)]
+        self.assertEqual(node_x3_y3.name, "x3-y3")
+
+    def test_getLinkFlows_returns_zero_for_all_links_initially(self):
+        """getLinkFlows snapshots every link's flow_count; freshly built cluster is all zero."""
+        flows = self.cluster.getLinkFlows()
+        self.assertEqual(len(flows), len(self.cluster.links))
+        self.assertTrue(all(v == 0 for v in flows.values()))
+        # Spot-check one known link name from c1.json.
+        self.assertIn("x0-y0-p1:x1-y0-p0", flows)
+        self.assertEqual(flows["x0-y0-p1:x1-y0-p0"], 0)
+
     def test_node_failure(self):
         """
         Verify that failed nodes are marked as unavailable.
@@ -191,3 +211,7 @@ class TestClusterSimple(unittest.TestCase):
         for node_name in failed_nodes:
             self.assertEqual(self.cluster.getIdleXPU(node_name), 0)
         self.assertEqual(failed_nodes, self.cluster.getFailedNodes())
+
+
+if __name__ == "__main__":
+    unittest.main()

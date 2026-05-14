@@ -132,6 +132,16 @@ class Cluster:
             dst_port.setTermLink(link_obj)
         # ----- finish parsing the cluster spec -----
 
+        # Coord -> Node lookup. Populated only for torus topologies; used by
+        # _routePath to resolve next-hop neighbors during link-flow accounting.
+        self._coord_to_node: dict[tuple[int, ...], Node] = {}
+        if self.topo in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
+            for node in self.nodes.values():
+                if self.topo == TopoType.T2D:
+                    self._coord_to_node[(node.dimx, node.dimy)] = node
+                else:
+                    self._coord_to_node[(node.dimx, node.dimy, node.dimz)] = node
+
     def execute(self, job: Job):
         """
         Executes a job on the cluster. The job is broken down into subjobs and sent to
@@ -152,6 +162,10 @@ class Cluster:
         logging.info(f"t = {self.env.now}, job {job.short_print()} completed")
         for entry in job.allocation.values():
             self.nodes[entry["node"]].free(entry["num_xpu"])
+
+    def getLinkFlows(self) -> dict[str, int]:
+        """Return {link_name: flow_count} for every link in the cluster."""
+        return {name: link.flow_count for name, link in self.links.items()}
 
     def numNodes(self) -> int:
         """
