@@ -54,6 +54,7 @@ class Link:
     - src_port: source port of the link.
     - dst_port: destination port of the link.
     - speed_gbps: speed the link is running at (in Gbps).
+    - flow_count: number of concurrent flows currently routed across this link.
     """
 
     def __init__(
@@ -77,9 +78,15 @@ class Link:
         self._residual = 0
 
     def incFlow(self) -> None:
+        """
+        Increment flow count by 1.
+        """
         self.flow_count += 1
 
     def decFlow(self) -> None:
+        """
+        Decrement flow count by 1.
+        """
         if self.flow_count <= 0:
             raise ValueError(
                 f"Link {self.name} flow_count is already 0; cannot decrement."
