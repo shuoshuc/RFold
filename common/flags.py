@@ -231,12 +231,12 @@ class Flags:
         return self.args.log_level
 
     @property
-    def stats_outdir(self):
-        return self.args.stats_outdir
-
-    @property
     def link_latency_ns(self):
         return self.args.link_latency_ns
+
+    @property
+    def stats_outdir(self):
+        return self.args.stats_outdir
 
 
 # Instantiate a global flags object.
