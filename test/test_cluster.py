@@ -25,6 +25,24 @@ C1_NODE1 = "x0-y0"
 C1_NODE2 = "x3-y3"
 C1_NODE3 = "x2-y1"
 
+# Path to cluster C2's spec file. C2 is folded Clos.
+C2_SPEC = "Cluster/models/c2.json"
+
+
+def _make_t2d_job(uuid: int, shape, node_ranks: list[str], duration_sec: float = 10.0):
+    """Build a T2D Job and populate its allocation in the given rank order."""
+    job = Job(
+        uuid=uuid,
+        topology=TopoType.T2D,
+        shape=shape,
+        size=len(node_ranks),
+        duration_sec=duration_sec,
+        arrival_time_sec=0,
+    )
+    for name in node_ranks:
+        job.addToAllocation(name)
+    return job
+
 
 class TestClusterSimple(unittest.TestCase):
 
@@ -302,6 +320,110 @@ class TestClusterRouting(unittest.TestCase):
             self._link_names(path),
             ["x1-y2-p1:x2-y2-p0", "x2-y2-p1:x3-y2-p0"],
         )
+
+
+class TestClusterLinkFlows(unittest.TestCase):
+    """End-to-end flow accounting via Cluster.execute / Cluster.complete."""
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
+
+    def _flow(self, link_name: str) -> int:
+        return self.cluster.links[link_name].flow_count
+
+    def test_clos_job_is_noop_for_link_flows(self):
+        """A non-torus job goes through execute/complete without changing any flow_count."""
+        # Build a CLOS-topology Job; topology check in _updateJobLinkFlows short-circuits
+        # before getCommPattern is called. We still need a valid allocation for execute()
+        # to run alloc/free on the c1.json T2D nodes.
+        job = Job(
+            uuid=99,
+            topology=TopoType.CLOS,
+            shape=(1,),
+            size=1,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        job.addToAllocation("x0-y0")
+        self.cluster.execute(job)
+        self.assertTrue(all(v == 0 for v in self.cluster.getLinkFlows().values()))
+        self.cluster.complete(job)
+        self.assertTrue(all(v == 0 for v in self.cluster.getLinkFlows().values()))
+
+    def test_single_2x1_job_increments_forward_and_wrap_path(self):
+        """Shape (2,1) at [x0-y0, x1-y0]: forward edge = 1 link, wrap edge = 3 links."""
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job)
+        # Forward edge (rank 0 -> 1): x0-y0 -> x1-y0.
+        self.assertEqual(self._flow("x0-y0-p1:x1-y0-p0"), 1)
+        # Wrap edge (rank 1 -> 0): x1 -> x2 -> x3 -> x0.
+        self.assertEqual(self._flow("x1-y0-p1:x2-y0-p0"), 1)
+        self.assertEqual(self._flow("x2-y0-p1:x3-y0-p0"), 1)
+        self.assertEqual(self._flow("x3-y0-p1:x0-y0-p0"), 1)
+        # Total non-zero links: 4. Everything else stays at 0.
+        nonzero = {k: v for k, v in self.cluster.getLinkFlows().items() if v > 0}
+        self.assertEqual(len(nonzero), 4)
+
+    def test_execute_then_complete_returns_all_flows_to_zero(self):
+        """Symmetric: execute then complete leaves every link at flow_count == 0."""
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job)
+        self.cluster.complete(job)
+        self.assertTrue(all(v == 0 for v in self.cluster.getLinkFlows().values()))
+
+    def test_two_nonoverlapping_jobs_share_links_via_wraparound(self):
+        """Job A on [x0,x1] and Job B on [x2,x3] (y=0): wraparound paths cross all 4 +x links on row y=0."""
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
+        self.cluster.execute(job_a)
+        self.cluster.execute(job_b)
+        shared = [
+            "x0-y0-p1:x1-y0-p0",
+            "x1-y0-p1:x2-y0-p0",
+            "x2-y0-p1:x3-y0-p0",
+            "x3-y0-p1:x0-y0-p0",
+        ]
+        for name in shared:
+            self.assertEqual(self._flow(name), 2, f"{name} should be 2 after both executes")
+        # After completing Job A only: every shared link drops to 1.
+        self.cluster.complete(job_a)
+        for name in shared:
+            self.assertEqual(self._flow(name), 1, f"{name} should be 1 after A complete")
+        # After completing Job B: all return to 0.
+        self.cluster.complete(job_b)
+        self.assertTrue(all(v == 0 for v in self.cluster.getLinkFlows().values()))
+
+    def test_2x2_job_exercises_both_axes(self):
+        """Shape (2,2) at the corner: spot-check one +x and one +y link each see 1 flow."""
+        job = _make_t2d_job(
+            uuid=1,
+            shape=(2, 2),
+            node_ranks=["x0-y0", "x1-y0", "x0-y1", "x1-y1"],
+        )
+        self.cluster.execute(job)
+        # The +x edge (rank 0 -> 1) routes x0-y0 -> x1-y0 directly; no other comm edge
+        # in this allocation routes through x0-y0->x1-y0.
+        self.assertEqual(self._flow("x0-y0-p1:x1-y0-p0"), 1)
+        # The +y edge (rank 0 -> 2) routes x0-y0 -> x0-y1 directly; no other comm edge
+        # routes through x0-y0->x0-y1.
+        self.assertEqual(self._flow("x0-y0-p3:x0-y1-p2"), 1)
+
+    def test_complete_without_execute_raises_underflow(self):
+        """complete on a never-executed job triggers decFlow on a 0-count link -> ValueError."""
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        with self.assertRaises(ValueError) as cm:
+            self.cluster.complete(job)
+        # Error message names the offending link (the first one walked).
+        self.assertIn("flow_count is already 0", str(cm.exception))
+
+    def test_getLinkFlows_matches_direct_field_reads(self):
+        """The accessor snapshots flow_count consistently with reading link.flow_count."""
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job)
+        snapshot = self.cluster.getLinkFlows()
+        for name, link in self.cluster.links.items():
+            self.assertEqual(snapshot[name], link.flow_count)
 
 
 if __name__ == "__main__":

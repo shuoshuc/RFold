@@ -154,14 +154,33 @@ class Cluster:
             raise ValueError(f"Job {job.uuid} allocation info is missing.")
         for entry in job.allocation.values():
             self.nodes[entry["node"]].alloc(entry["num_xpu"])
+        self._updateJobLinkFlows(job, delta=+1)
 
     def complete(self, job: Job):
         """
         Handle a job's completion. Free up the resources allocated to the job.
         """
         logging.info(f"t = {self.env.now}, job {job.short_print()} completed")
+        self._updateJobLinkFlows(job, delta=-1)
         for entry in job.allocation.values():
             self.nodes[entry["node"]].free(entry["num_xpu"])
+
+    def _updateJobLinkFlows(self, job: Job, delta: int) -> None:
+        """
+        Walk every comm-pattern edge of `job`, resolve the physical path via DOR
+        routing, and inc/dec flow_count on each traversed link. No-op for jobs whose
+        topology has no comm pattern (mesh, Clos).
+        """
+        if job.topology not in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
+            return
+        for src_rank, dst_rank, _vol in job.getCommPattern():
+            src_node = self.nodes[job.allocation[src_rank]["node"]]
+            dst_node = self.nodes[job.allocation[dst_rank]["node"]]
+            for link in self._routePath(src_node, dst_node):
+                if delta > 0:
+                    link.incFlow()
+                else:
+                    link.decFlow()
 
     def getLinkFlows(self) -> dict[str, int]:
         """Return {link_name: flow_count} for every link in the cluster."""
