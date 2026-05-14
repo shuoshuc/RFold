@@ -126,6 +126,7 @@ class Cluster:
                 src_port=src_port,
                 dst_port=dst_port,
                 speed_gbps=l["speed_gbps"],
+                latency_ns=FLAGS.link_latency_ns,
             )
             self.links[link_obj.name] = link_obj
             src_port.setOrigLink(link_obj)

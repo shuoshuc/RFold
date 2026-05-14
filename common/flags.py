@@ -149,6 +149,12 @@ class Flags:
             ),
         )
         self.parser.add_argument(
+            "--link_latency_ns",
+            type=float,
+            default=100.0,
+            help="Per-link propagation+forwarding latency in nanoseconds, applied to every Link.",
+        )
+        self.parser.add_argument(
             "--stats_outdir",
             type=str,
             default="",
@@ -227,6 +233,10 @@ class Flags:
     @property
     def stats_outdir(self):
         return self.args.stats_outdir
+
+    @property
+    def link_latency_ns(self):
+        return self.args.link_latency_ns
 
 
 # Instantiate a global flags object.

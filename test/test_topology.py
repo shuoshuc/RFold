@@ -44,6 +44,22 @@ class TestLinkFlowCount(unittest.TestCase):
         with self.assertRaises(ValueError):
             link.decFlow()
 
+    def test_latency_ns_default_is_none(self):
+        """Link constructed without latency_ns keeps the field at None."""
+        link = self._make_link()
+        self.assertIsNone(link.latency_ns)
+
+    def test_latency_ns_populated_from_constructor(self):
+        """Link accepts latency_ns and exposes it as a public field."""
+        link = Link(
+            name="x0-y0-p1:x1-y0-p0",
+            src_port=None,
+            dst_port=None,
+            speed_gbps=100.0,
+            latency_ns=50.0,
+        )
+        self.assertEqual(link.latency_ns, 50.0)
+
 
 if __name__ == "__main__":
     unittest.main()

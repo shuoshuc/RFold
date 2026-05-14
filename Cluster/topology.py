@@ -55,6 +55,7 @@ class Link:
     - dst_port: destination port of the link.
     - speed_gbps: speed the link is running at (in Gbps).
     - flow_count: number of concurrent flows currently routed across this link.
+    - latency_ns: per-link propagation+forwarding latency in nanoseconds.
     """
 
     def __init__(
@@ -63,6 +64,7 @@ class Link:
         src_port: Port = None,
         dst_port: Port = None,
         speed_gbps: float = None,
+        latency_ns: float = None,
     ):
         self.name = name
         self.src_port = src_port
@@ -73,6 +75,9 @@ class Link:
         # Number of concurrent flows currently routed across this link.
         # Maintained by Cluster.execute / Cluster.complete via incFlow/decFlow.
         self.flow_count: int = 0
+        # Per-link propagation+forwarding latency in nanoseconds.
+        # Populated by Cluster.__init__ from FLAGS.link_latency_ns.
+        self.latency_ns: float = latency_ns
 
     def resetResidual(self):
         self._residual = 0
