@@ -181,10 +181,14 @@ class Cluster:
             dims = [self.dimx, self.dimy]
             src_coord = (src.dimx, src.dimy)
             dst_coord = (dst.dimx, dst.dimy)
-        else:
+        elif self.topo in (TopoType.T3D_NT, TopoType.T3D_T):
             dims = [self.dimx, self.dimy, self.dimz]
             src_coord = (src.dimx, src.dimy, src.dimz)
             dst_coord = (dst.dimx, dst.dimy, dst.dimz)
+        else:
+            raise ValueError(
+                f"_routePath is not supported for topology {self.topo.name}."
+            )
 
         links: list[Link] = []
         cur = list(src_coord)

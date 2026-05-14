@@ -280,6 +280,29 @@ class TestClusterRouting(unittest.TestCase):
         path = self.cluster._routePath(self._node("x0-y3"), self._node("x0-y0"))
         self.assertEqual(self._link_names(path), ["x0-y3-p3:x0-y0-p2"])
 
+    def test_missing_link_raises_value_error(self):
+        """_routePath raises ValueError naming the offending nodes if the
+        expected next-hop link is absent (simulates e.g. T3D_T twist or a
+        topology gap)."""
+        src = self._node("x0-y0")
+        dst = self._node("x1-y0")
+        # Synthetically remove the expected link to trigger the raise path.
+        del self.cluster.links["x0-y0-p1:x1-y0-p0"]
+        with self.assertRaises(ValueError) as cm:
+            self.cluster._routePath(src, dst)
+        self.assertIn("x0-y0", str(cm.exception))
+        self.assertIn("x1-y0", str(cm.exception))
+
+    def test_two_hop_plus_x_from_non_origin(self):
+        """Mid-lattice same-axis routing: x1-y2 -> x3-y2 traverses 2 +x links
+        from a non-zero starting coordinate (guards against off-by-one in the
+        modular hop-count formula that would only manifest when start != 0)."""
+        path = self.cluster._routePath(self._node("x1-y2"), self._node("x3-y2"))
+        self.assertEqual(
+            self._link_names(path),
+            ["x1-y2-p1:x2-y2-p0", "x2-y2-p1:x3-y2-p0"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
