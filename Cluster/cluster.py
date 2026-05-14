@@ -4,7 +4,7 @@ import numpy as np
 from itertools import product
 from math import ceil
 from numpy.typing import NDArray
-from typing import Optional, Union
+from typing import Iterator, Optional, Union
 
 from common.flags import FLAGS
 from common.job import Job, TopoType
@@ -168,11 +168,13 @@ class Cluster:
         for entry in job.allocation.values():
             self.nodes[entry["node"]].free(entry["num_xpu"])
 
-    def _updateJobLinkFlows(self, job: Job, delta: int) -> None:
+    def routeJobPaths(self, job: Job) -> Iterator[tuple[int, int, list[Link]]]:
         """
-        Walk every comm-pattern edge of `job`, resolve the physical path via DOR
-        routing, and inc/dec flow_count on each traversed link. No-op for jobs whose
-        topology has no comm pattern (mesh, Clos).
+        Yield (src_rank, dst_rank, [links]) for each comm-pattern edge of `job`.
+        No-op (yields nothing) for jobs without a comm pattern (mesh, Clos).
+
+        Raises ValueError if a rank in the comm pattern is missing from
+        job.allocation (same diagnostic as _updateJobLinkFlows previously gave).
         """
         if job.topology not in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
             return
@@ -185,7 +187,16 @@ class Cluster:
                     f"Job {job.uuid}: comm-pattern rank {e.args[0]} missing from "
                     f"allocation (allocation size = {len(job.allocation)})."
                 ) from e
-            for link in self._routePath(src_node, dst_node):
+            yield src_rank, dst_rank, self._routePath(src_node, dst_node)
+
+    def _updateJobLinkFlows(self, job: Job, delta: int) -> None:
+        """
+        Walk every comm-pattern edge of `job` via routeJobPaths and inc/dec
+        flow_count on each link of each path. No-op for jobs whose topology
+        has no comm pattern.
+        """
+        for _src, _dst, links in self.routeJobPaths(job):
+            for link in links:
                 if delta == 1:
                     link.incFlow()
                 elif delta == -1:

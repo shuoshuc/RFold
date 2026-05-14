@@ -423,5 +423,50 @@ class TestClusterLinkFlows(unittest.TestCase):
             self.assertEqual(snapshot[name], link.flow_count)
 
 
+class TestRouteJobPaths(unittest.TestCase):
+    """Unit tests for Cluster.routeJobPaths."""
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
+
+    def test_non_torus_job_yields_nothing(self):
+        """A CLOS-topology job has no comm pattern, so routeJobPaths yields no edges."""
+        job = Job(
+            uuid=99,
+            topology=TopoType.CLOS,
+            shape=(1,),
+            size=1,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        job.addToAllocation("x0-y0")
+        edges = list(self.cluster.routeJobPaths(job))
+        self.assertEqual(edges, [])
+
+    def test_torus_job_yields_one_entry_per_comm_edge(self):
+        """A (2, 1) T2D job has 2 comm-pattern edges; routeJobPaths yields 2 tuples
+        whose third element is the link list returned by _routePath."""
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        edges = list(self.cluster.routeJobPaths(job))
+        # Comm pattern for (2,1) is [(0, 1, 1.0), (1, 0, 1.0)] — two edges.
+        self.assertEqual(len(edges), 2)
+        # First edge: rank 0 -> 1, 1 link forward.
+        src_rank, dst_rank, links = edges[0]
+        self.assertEqual((src_rank, dst_rank), (0, 1))
+        self.assertEqual([l.name for l in links], ["x0-y0-p1:x1-y0-p0"])
+        # Second edge: rank 1 -> 0, 3 links forward (wrap).
+        src_rank, dst_rank, links = edges[1]
+        self.assertEqual((src_rank, dst_rank), (1, 0))
+        self.assertEqual(
+            [l.name for l in links],
+            [
+                "x1-y0-p1:x2-y0-p0",
+                "x2-y0-p1:x3-y0-p0",
+                "x3-y0-p1:x0-y0-p0",
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
