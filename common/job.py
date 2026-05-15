@@ -92,6 +92,9 @@ class Job:
     current_slowdown: float = field(default=1.0, compare=False)
     # ----- end of contention model state -----
 
+    def __hash__(self) -> int:
+        return id(self)
+
     def __post_init__(self):
         self.priority = self.arrival_time_sec
         # T3D_NT and T3D_T share this branch because twist affects physical

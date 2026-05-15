@@ -475,5 +475,76 @@ class TestComputeMinTopology(unittest.TestCase):
         self.cluster.links["x0-y0-p1:x1-y0-p0"].decFlow()
 
 
+class TestFindImpactedJobs(unittest.TestCase):
+    """Unit tests for ContentionModel.findImpactedJobs on the c1.json 4x4 T2D."""
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
+        self.model = ContentionModel(self.env, self.cluster)
+
+    def test_disjoint_paths_admit_returns_only_trigger(self):
+        """Two jobs on rows y=0 and y=2 share no links: impacted={trigger}."""
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x0-y2", "x1-y2"])
+        self.cluster.execute(job_b)  # B running first
+        impacted = self.model.findImpactedJobs(job_a, [job_b], is_admit=True)
+        self.assertEqual(impacted, {job_a})
+
+    def test_shared_wraparound_admit_returns_both(self):
+        """Wraparound paths of two jobs on row y=0 cross all 4 +x links of
+        that row; admitting A while B runs returns {A, B}."""
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
+        self.cluster.execute(job_b)  # B already running; its links are bumped
+        impacted = self.model.findImpactedJobs(job_a, [job_b], is_admit=True)
+        self.assertEqual(impacted, {job_a, job_b})
+
+    def test_shared_wraparound_complete_excludes_trigger(self):
+        """Completing A returns only the other job(s) sharing links; A is
+        excluded because it's no longer running."""
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
+        self.cluster.execute(job_a)
+        self.cluster.execute(job_b)
+        # Note: complete() is the caller's responsibility before this is called;
+        # we are testing findImpactedJobs alone, so just pass the post-state.
+        impacted = self.model.findImpactedJobs(job_a, [job_b], is_admit=False)
+        self.assertEqual(impacted, {job_b})
+
+    def test_non_torus_trigger_admit_returns_trigger_only(self):
+        """A non-torus triggering job has no paths to share. Admit returns
+        only the trigger itself."""
+        clos_job = Job(
+            uuid=99,
+            topology=TopoType.CLOS,
+            shape=(1,),
+            size=1,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        clos_job.addToAllocation("x0-y0")
+        running_job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x2-y2", "x3-y2"])
+        self.cluster.execute(running_job)
+        impacted = self.model.findImpactedJobs(clos_job, [running_job], is_admit=True)
+        self.assertEqual(impacted, {clos_job})
+
+    def test_non_torus_trigger_complete_returns_empty(self):
+        """A non-torus triggering job on completion impacts nobody."""
+        clos_job = Job(
+            uuid=99,
+            topology=TopoType.CLOS,
+            shape=(1,),
+            size=1,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        clos_job.addToAllocation("x0-y0")
+        running_job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x2-y2", "x3-y2"])
+        self.cluster.execute(running_job)
+        impacted = self.model.findImpactedJobs(clos_job, [running_job], is_admit=False)
+        self.assertEqual(impacted, set())
+
+
 if __name__ == "__main__":
     unittest.main()

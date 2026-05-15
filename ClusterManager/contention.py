@@ -68,6 +68,41 @@ class ContentionModel:
             edges.append(MinTopoEdge(src_rank, dst_rank, eff_bw_gbps, eff_lat_ns))
         return edges
 
+    def findImpactedJobs(
+        self,
+        triggering_job: Job,
+        running_jobs: Iterable[Job],
+        is_admit: bool,
+    ) -> set[Job]:
+        """
+        Return the set of running jobs whose comm-pattern paths share at
+        least one physical link with `triggering_job`'s paths.
+
+        For admit events, `triggering_job` is included in the set; for
+        complete events it is excluded (no longer running).
+
+        A non-torus triggering job (no comm pattern) has no paths to share:
+          - admit:    returns {triggering_job}
+          - complete: returns set()
+        """
+        changed_links: set[str] = set()
+        for _src, _dst, links in self.cluster.routeJobPaths(triggering_job):
+            changed_links.update(l.name for l in links)
+        if not changed_links:
+            return {triggering_job} if is_admit else set()
+
+        impacted: set[Job] = set()
+        for job in running_jobs:
+            if job.uuid == triggering_job.uuid:
+                continue
+            for _src, _dst, links in self.cluster.routeJobPaths(job):
+                if any(l.name in changed_links for l in links):
+                    impacted.add(job)
+                    break
+        if is_admit:
+            impacted.add(triggering_job)
+        return impacted
+
     def slowdown(self, running_jobs: Iterable[Job]) -> dict[int, float]:
         """
         Pluggable slowdown function. Inputs:
