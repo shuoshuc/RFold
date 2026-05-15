@@ -312,14 +312,14 @@ class TestClusterManagerContention(unittest.TestCase):
 
     def test_identity_baseline(self):
         """Identity stub with overlapping jobs: JCT still equals duration_sec, but the
-        admit and complete recompute paths are both exercised. If recompute were
-        deleted, this test would still pass for non-overlapping jobs — overlap is
-        what makes it a real regression guard."""
+        admit and complete onAdmit/onComplete paths are both exercised. If onAdmit/
+        onComplete were deleted, this test would still pass for non-overlapping jobs —
+        overlap is what makes it a real regression guard."""
         jobs = [
             _make_alloc_job(uuid=1, duration_sec=10, arrival_time_sec=0, node="n1"),
-            # Arrives while J1 is still running, so the admit-path recompute fires
-            # with two jobs in the running queue. J2 finishes first, so the
-            # complete-path recompute also fires while J1 is still alive.
+            # Arrives while J1 is still running, so the onAdmit path fires with two
+            # jobs in the running queue. J2 finishes first, so the onComplete path
+            # also fires while J1 is still alive.
             _make_alloc_job(uuid=2, duration_sec=4, arrival_time_sec=2, node="n2"),
         ]
         mgr = self._run(jobs, ContentionModel)
@@ -495,6 +495,27 @@ class TestComputeMinTopology(unittest.TestCase):
         self.assertEqual(forward.eff_bw_gbps, self.link_speed_gbps / 2)
         # Restore counter to keep cluster state consistent if tests share fixtures.
         self.cluster.links["x0-y0-p1:x1-y0-p0"].decFlow()
+
+    def test_bottleneck_min_with_mixed_flow_counts(self):
+        """When the path has mixed flow_count (one bottleneck link at
+        flow_count=2 and other links at flow_count=1), eff_bw_gbps equals
+        the minimum fair-share — speed/2 — not an average. Pins the
+        bottleneck-min semantics versus a sum or average regression."""
+        # Use the (2,1) wrap edge: rank 1 -> 0 routes x1->x2->x3->x0 (3 hops).
+        # All three links start at flow_count=1 from the job's own admit.
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job)
+        # Manually bump only the middle link (x2-y0->x3-y0) so its flow_count
+        # is 2 while x1-y0->x2-y0 and x3-y0->x0-y0 remain at 1.
+        self.cluster.links["x2-y0-p1:x3-y0-p0"].incFlow()
+        topo = self.model.computeMinTopology(job)
+        wrap = topo[1]  # the (1, 0) edge
+        # min(speed/1, speed/2, speed/1) = speed/2.
+        self.assertEqual(wrap.eff_bw_gbps, self.link_speed_gbps / 2)
+        # Cumulative latency unaffected by flow_count: 3 hops.
+        self.assertEqual(wrap.eff_lat_ns, 3 * self.link_lat_ns)
+        # Restore counter so other tests don't see leaked state.
+        self.cluster.links["x2-y0-p1:x3-y0-p0"].decFlow()
 
 
 class TestFindImpactedJobs(unittest.TestCase):
