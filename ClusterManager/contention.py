@@ -103,26 +103,59 @@ class ContentionModel:
             impacted.add(triggering_job)
         return impacted
 
-    def slowdown(self, running_jobs: Iterable[Job]) -> dict[int, float]:
+    def slowdown(
+        self,
+        impacted_jobs: Iterable[Job],
+        min_topologies: dict[int, MinTopology],
+    ) -> dict[int, float]:
         """
         Pluggable slowdown function. Inputs:
-          - running_jobs: every currently placed job. Each Job's .allocation
-            field carries the exact job-to-node mapping; cluster topology is
-            available via self.cluster.
-        Returns: {job.uuid: slowdown_factor}. Factor >= 1.0 means slower; 1.0
-        means no contention. Identity stub by default.
+          - impacted_jobs: the subset of running jobs whose contention state
+            just changed (share a link with the triggering job; includes the
+            admitted job for admit events).
+          - min_topologies: {job.uuid: MinTopology} for every impacted job.
+            Each MinTopoEdge carries effective bandwidth and cumulative
+            latency for one comm-pattern pair.
+        Returns: {job.uuid: factor}. Factor >= 1.0 means slower; 1.0 means
+        no contention. Identity stub by default; does NOT consume
+        min_topologies in this revision.
         """
-        return {job.uuid: 1.0 for job in running_jobs}
+        return {job.uuid: 1.0 for job in impacted_jobs}
 
-    def recompute(self, running_jobs: Iterable[Job]) -> None:
+    def onAdmit(self, admitted_job: Job, running_jobs: Iterable[Job]) -> None:
         """
-        Recompute slowdowns for all currently running jobs and push the new
-        factor onto each. Jobs update their own work-done accumulator and ETA.
-        Logs a debug line whenever a factor changes.
+        Called by ClusterManager.executeOnCluster after a job has been
+        admitted and link flows have been bumped. Updates slowdown factors
+        on the admitted job and on every other running job whose paths
+        share a link with it.
         """
-        jobs = list(running_jobs)
-        factors = self.slowdown(jobs)
-        for job in jobs:
+        impacted = self.findImpactedJobs(admitted_job, running_jobs, is_admit=True)
+        self._applyToImpacted(impacted)
+
+    def onComplete(self, completed_job: Job, running_jobs: Iterable[Job]) -> None:
+        """
+        Called by ClusterManager.completeOnCluster after a job has been
+        completed and link flows have been decremented. Updates slowdown
+        factors on every remaining running job whose paths shared a link
+        with the completed job.
+        """
+        impacted = self.findImpactedJobs(completed_job, running_jobs, is_admit=False)
+        self._applyToImpacted(impacted)
+
+    def _applyToImpacted(self, impacted: set[Job]) -> None:
+        """
+        Compute the min topology for each impacted job, call the pluggable
+        slowdown function, then push the new factor onto each impacted job
+        via Job.applySlowdown. Non-impacted jobs are intentionally left
+        untouched (their slowdown didn't change, so the next event that
+        touches them will accrue work correctly over the unchanged-factor
+        interval).
+        """
+        if not impacted:
+            return
+        min_topos = {j.uuid: self.computeMinTopology(j) for j in impacted}
+        factors = self.slowdown(impacted, min_topos)
+        for job in impacted:
             old_s = job.current_slowdown
             new_s = factors[job.uuid]
             job.applySlowdown(new_s, self.env.now)

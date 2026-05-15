@@ -292,9 +292,9 @@ class ClusterManager:
         # Move the running job into the running queue.
         self.new_job_queue.remove(job)
         self.running_job_queue.enqueue(job)
-        # Placement set changed: recompute for every running job (including the
+        # Placement set changed: update impacted running jobs (including the
         # new one), then re-sort so the head reflects the new earliest ETA.
-        self.contention_model.recompute(self.running_job_queue.slist)
+        self.contention_model.onAdmit(job, self.running_job_queue.slist)
         self._rebuildRunningQueue()
         # Wake the guard. If it was on a timer, interrupt it; if it was waiting
         # for a job to be enqueued, signal arrival. We always interrupt under
@@ -317,8 +317,8 @@ class ClusterManager:
         job.jct_sec = self.env.now - job.arrival_time_sec
         job.slowdown = job.jct_sec / job.duration_sec
         self.job_stats[job.uuid] = job
-        # Placement set changed: refresh the remaining running jobs.
-        self.contention_model.recompute(self.running_job_queue.slist)
+        # Placement set changed: refresh impacted remaining running jobs.
+        self.contention_model.onComplete(job, self.running_job_queue.slist)
         self._rebuildRunningQueue()
         # No guard interrupt needed: completeOnCluster is invoked from inside
         # the guard's own loop; the guard naturally peeks the (re-sorted) head

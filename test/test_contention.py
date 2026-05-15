@@ -112,114 +112,115 @@ class TestApplySlowdown(unittest.TestCase):
 
 
 class TestContentionModel(unittest.TestCase):
+    """Unit tests for the ContentionModel API surface (slowdown stub,
+    onAdmit dispatch, log behavior). These use a MagicMock cluster so the
+    findImpactedJobs path is short-circuited via the impacted-set being
+    {triggering_job} only — the unit tests pin the per-job dispatch
+    invariants, not the cross-job impacted-set detection logic."""
+
     def setUp(self):
         self.env = simpy.Environment()
+        # MagicMock cluster: routeJobPaths returns no edges, so findImpactedJobs
+        # short-circuits to {triggering_job} on admit / set() on complete.
         self.cluster = MagicMock(spec=Cluster)
+        self.cluster.routeJobPaths.side_effect = lambda job: iter([])
         self.model = ContentionModel(self.env, self.cluster)
 
-    def test_identity_returns_one_for_all(self):
-        """The default slowdown stub returns 1.0 for every running job."""
+    def test_identity_returns_one_for_all_impacted(self):
+        """The default slowdown stub returns 1.0 for every impacted job."""
         jobs = [make_job(uuid=i, duration_sec=10) for i in (1, 2, 3)]
-        factors = self.model.slowdown(jobs)
+        factors = self.model.slowdown(jobs, {j.uuid: [] for j in jobs})
         self.assertEqual(factors, {1: 1.0, 2: 1.0, 3: 1.0})
 
-    def test_recompute_updates_all_running_jobs(self):
-        """recompute calls applySlowdown(1.0, env.now) on every running job."""
-        jobs = [make_job(uuid=i, duration_sec=10) for i in (1, 2)]
-        self.model.recompute(jobs)
-        for j in jobs:
-            self.assertEqual(j.current_slowdown, 1.0)
-            self.assertEqual(j.last_event_time_sec, self.env.now)
-            self.assertEqual(j.priority, self.env.now + 10)
+    def test_onAdmit_updates_admitted_job(self):
+        """onAdmit calls applySlowdown(1.0, env.now) on the admitted job
+        when the cluster yields no shared paths."""
+        admitted = make_job(uuid=1, duration_sec=10)
+        running = [admitted]
+        self.model.onAdmit(admitted, running)
+        self.assertEqual(admitted.current_slowdown, 1.0)
+        self.assertEqual(admitted.last_event_time_sec, self.env.now)
+        self.assertEqual(admitted.priority, self.env.now + 10)
 
-    def test_recompute_logs_only_on_change(self):
-        """A debug log fires when a job's factor changes, not when it stays the same."""
+    def test_onAdmit_logs_only_on_factor_change(self):
+        """A debug log fires only when the factor changes."""
 
         class TwoXModel(ContentionModel):
-            def slowdown(self, running_jobs):
-                return {j.uuid: 2.0 for j in running_jobs}
+            def slowdown(self, impacted_jobs, min_topologies):
+                return {j.uuid: 2.0 for j in impacted_jobs}
 
         model = TwoXModel(self.env, self.cluster)
-        jobs = [make_job(uuid=1, duration_sec=10)]
+        admitted = make_job(uuid=1, duration_sec=10)
 
-        # First call: 1.0 -> 2.0, expect a debug log.
+        # First admit: 1.0 -> 2.0, expect a debug log.
         with self.assertLogs(level="DEBUG") as cm:
-            model.recompute(jobs)
+            model.onAdmit(admitted, [admitted])
         self.assertTrue(any("slowdown 1.0 -> 2.0" in m for m in cm.output))
 
-        # Second call at same env.now: 2.0 -> 2.0, expect NO debug log for that job.
+        # Second admit at the same env.now: 2.0 -> 2.0, expect NO log for it.
         with self.assertLogs(level="DEBUG") as cm:
-            # Emit a sentinel so assertLogs has something to capture even if no
-            # slowdown-change log fires.
             logging.debug("sentinel")
-            model.recompute(jobs)
+            model.onAdmit(admitted, [admitted])
         self.assertFalse(any("slowdown 2.0 -> 2.0" in m for m in cm.output))
 
-    def test_recompute_empty_queue_is_noop(self):
-        """recompute on an empty list must not raise. This path is exercised
-        by completeOnCluster when the last running job exits."""
-        # Just must not raise. No assertion needed beyond "did not blow up."
-        self.model.recompute([])
+    def test_onComplete_empty_impacted_is_noop(self):
+        """onComplete on a running set with no overlap (impacted = set())
+        does not raise and does not call applySlowdown. This is the path
+        exercised by completeOnCluster when the last running job exits."""
+        completed = make_job(uuid=1, duration_sec=10)
+        with patch.object(Job, "applySlowdown", autospec=True) as spy:
+            self.model.onComplete(completed, [])
+        self.assertEqual(spy.call_count, 0)
 
-    def test_recompute_isclose_guard_suppresses_jitter(self):
-        """When a slowdown function returns FP-jittered factors that are
-        math.isclose to the prior value, no debug log should fire. Today's
-        identity stub returns the literal 1.0, but a real model will produce
-        FP-derived factors — this guards against log spam."""
+    def test_onAdmit_isclose_guard_suppresses_jitter(self):
+        """When the slowdown function returns FP-jittered factors that are
+        math.isclose to the prior value, no debug log fires."""
 
         class JitterModel(ContentionModel):
             def __init__(self, env, cluster):
                 super().__init__(env, cluster)
                 self.calls = 0
 
-            def slowdown(self, running_jobs):
+            def slowdown(self, impacted_jobs, min_topologies):
                 self.calls += 1
-                # First call sets factor to 2.0; second returns 2.0 + 1e-15
-                # (math.isclose with default tolerances treats them as equal).
                 factor = 2.0 if self.calls == 1 else 2.0 + 1e-15
-                return {j.uuid: factor for j in running_jobs}
+                return {j.uuid: factor for j in impacted_jobs}
 
         model = JitterModel(self.env, self.cluster)
-        jobs = [make_job(uuid=1, duration_sec=10)]
+        admitted = make_job(uuid=1, duration_sec=10)
 
-        # First call: 1.0 -> 2.0, far from close, expect a slowdown-change log.
+        # First admit: 1.0 -> 2.0, log fires.
         with self.assertLogs(level="DEBUG") as cm:
-            model.recompute(jobs)
+            model.onAdmit(admitted, [admitted])
         self.assertTrue(any("slowdown" in m for m in cm.output))
 
-        # Second call: 2.0 -> 2.0 + 1e-15, math.isclose(default) = True,
-        # so NO slowdown-change log should fire.
+        # Second admit: 2.0 -> 2.0 + 1e-15, math.isclose default = True, no log.
         with self.assertLogs(level="DEBUG") as cm:
             logging.debug("sentinel")
-            model.recompute(jobs)
+            model.onAdmit(admitted, [admitted])
         self.assertFalse(any("slowdown" in m for m in cm.output))
 
-    def test_recompute_calls_applySlowdown_exactly_once_per_job(self):
-        """recompute must invoke Job.applySlowdown exactly once per running
-        job, regardless of factor changes. Spy-based check that closes a
-        gap left by test_recompute_updates_all_running_jobs (which only
-        verifies the effect, not the call count)."""
-        jobs = [make_job(uuid=i, duration_sec=10) for i in (1, 2, 3)]
+    def test_onAdmit_calls_applySlowdown_exactly_once_per_impacted_job(self):
+        """onAdmit must invoke Job.applySlowdown exactly once per impacted job."""
+        admitted = make_job(uuid=1, duration_sec=10)
         with patch.object(Job, "applySlowdown", autospec=True) as spy:
-            self.model.recompute(jobs)
-        self.assertEqual(spy.call_count, 3)
-        # autospec=True means the first positional arg is the Job instance.
-        called_uuids = [call.args[0].uuid for call in spy.call_args_list]
-        self.assertEqual(sorted(called_uuids), [1, 2, 3])
+            self.model.onAdmit(admitted, [admitted])
+        self.assertEqual(spy.call_count, 1)
+        self.assertEqual(spy.call_args_list[0].args[0].uuid, 1)
 
 
 class _TwoConcurrentSlow(ContentionModel):
-    """Slowdown 2.0 whenever 2+ jobs are running, 1.0 otherwise."""
-    def slowdown(self, running_jobs):
-        jobs = list(running_jobs)
+    """Slowdown 2.0 whenever 2+ impacted jobs are present, 1.0 otherwise."""
+    def slowdown(self, impacted_jobs, min_topologies):
+        jobs = list(impacted_jobs)
         s = 2.0 if len(jobs) >= 2 else 1.0
         return {j.uuid: s for j in jobs}
 
 
 class _AlwaysTwoX(ContentionModel):
-    """Slowdown 2.0 for every running job, regardless of count."""
-    def slowdown(self, running_jobs):
-        return {j.uuid: 2.0 for j in running_jobs}
+    """Slowdown 2.0 for every impacted job, regardless of count."""
+    def slowdown(self, impacted_jobs, min_topologies):
+        return {j.uuid: 2.0 for j in impacted_jobs}
 
 
 def _make_t2d_job(uuid: int, shape, node_ranks: list[str], duration_sec: float = 10.0) -> Job:
@@ -259,6 +260,19 @@ class TestClusterManagerContention(unittest.TestCase):
         """Drive the manager end-to-end with a mocked Cluster and the given contention model."""
         env = simpy.Environment()
         mock_cluster = MagicMock(spec=Cluster)
+        # Configure routeJobPaths so every job appears to share a single
+        # synthetic link. This keeps findImpactedJobs returning the full
+        # running set on every event, preserving the pre-refactor
+        # "every job sees the same contention state" semantics that the
+        # JCT-math tests below depend on.
+        shared_link = MagicMock()
+        shared_link.name = "shared-link"
+        shared_link.speed_gbps = 100.0
+        shared_link.flow_count = 1
+        shared_link.latency_ns = 100.0
+        mock_cluster.routeJobPaths.side_effect = lambda job: iter(
+            [(0, 1, [shared_link])]
+        )
         # Total new work check uses closed_loop_threshold=0 (disabled).
         mgr = ClusterManager(env, cluster=mock_cluster, sim_njobs=len(jobs))
         mgr.contention_model = model_cls(env, mock_cluster)
@@ -544,6 +558,48 @@ class TestFindImpactedJobs(unittest.TestCase):
         self.cluster.execute(running_job)
         impacted = self.model.findImpactedJobs(clos_job, [running_job], is_admit=False)
         self.assertEqual(impacted, set())
+
+
+class TestOnAdmitOnComplete(unittest.TestCase):
+    """End-to-end tests for ContentionModel.onAdmit / onComplete with the
+    identity stub slowdown."""
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
+        self.model = ContentionModel(self.env, self.cluster)
+
+    def test_disjoint_second_admit_does_not_touch_first_job(self):
+        """Two jobs with disjoint paths: admitting the second job calls
+        applySlowdown only on the admitted job (the disjoint earlier job is
+        not impacted, so it must not be touched)."""
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x0-y2", "x1-y2"])
+        # Admit Job A first.
+        self.cluster.execute(job_a)
+        self.model.onAdmit(job_a, [job_a])
+        # Now admit Job B; running_jobs at this point is [job_a, job_b]
+        # (Cluster.execute is the caller's responsibility before onAdmit).
+        self.cluster.execute(job_b)
+        with patch.object(Job, "applySlowdown", autospec=True) as spy:
+            self.model.onAdmit(job_b, [job_a, job_b])
+        called_uuids = [call.args[0].uuid for call in spy.call_args_list]
+        # Only Job B (the trigger) should receive applySlowdown; Job A is disjoint.
+        self.assertEqual(called_uuids, [2])
+
+    def test_overlapping_second_admit_touches_both_jobs(self):
+        """Two jobs whose wraparound paths overlap: admitting the second
+        calls applySlowdown on both jobs."""
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
+        self.cluster.execute(job_a)
+        self.model.onAdmit(job_a, [job_a])
+        self.cluster.execute(job_b)
+        with patch.object(Job, "applySlowdown", autospec=True) as spy:
+            self.model.onAdmit(job_b, [job_a, job_b])
+        called_uuids = sorted(call.args[0].uuid for call in spy.call_args_list)
+        # Both Job A (impacted via shared wrap links) and Job B (trigger) are touched.
+        self.assertEqual(called_uuids, [1, 2])
 
 
 if __name__ == "__main__":
