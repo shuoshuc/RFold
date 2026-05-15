@@ -93,7 +93,10 @@ class Job:
     # ----- end of contention model state -----
 
     def __hash__(self) -> int:
-        return id(self)
+        # Hash on uuid (which is part of __eq__'s compared fields) so that
+        # equal Job instances hash equal — satisfying Python's eq/hash
+        # contract while keeping the dataclass-generated value equality.
+        return hash(self.uuid)
 
     def __post_init__(self):
         self.priority = self.arrival_time_sec
