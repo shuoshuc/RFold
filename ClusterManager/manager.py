@@ -9,6 +9,7 @@ from common.flags import FLAGS
 from common.utils import Signal
 from ClusterManager.scheduling import SchedulingPolicy, SchedDecision
 from ClusterManager.contention import ContentionModel
+from ClusterManager.topology_exporter import TopologyExporter
 
 
 class SortedList:
@@ -78,6 +79,12 @@ class ClusterManager:
         # set changes (job admitted or completed) and pushes new factors onto
         # each impacted Job via Job.applySlowdown.
         self.contention_model = ContentionModel(env, cluster)
+        # Per-job effective-topology exporter. Gated by FLAGS.export_topology
+        # so disabled runs pay zero overhead.
+        self.exporter = (
+            TopologyExporter(self.contention_model, FLAGS.topology_export_dir)
+            if FLAGS.export_topology else None
+        )
         # A queue of newly arrived jobs, sorted by arrival times.
         # [Producer]: WorkloadGen module
         # [Consumer]: schedule()
@@ -297,6 +304,8 @@ class ClusterManager:
         # Placement set changed: update impacted running jobs (including the
         # new one), then re-sort so the head reflects the new earliest ETA.
         self.contention_model.onAdmit(job, self.running_job_queue.slist)
+        if self.exporter is not None:
+            self.exporter.exportRunning(self.running_job_queue.slist)
         self._rebuildRunningQueue()
         # Wake the guard. If it was on a timer, interrupt it; if it was waiting
         # for a job to be enqueued, signal arrival. We always interrupt because
@@ -321,6 +330,8 @@ class ClusterManager:
         self.job_stats[job.uuid] = job
         # Placement set changed: refresh impacted remaining running jobs.
         self.contention_model.onComplete(job, self.running_job_queue.slist)
+        if self.exporter is not None:
+            self.exporter.exportRunning(self.running_job_queue.slist)
         self._rebuildRunningQueue()
         # No guard interrupt needed: completeOnCluster is invoked from inside
         # the guard's own loop; the guard naturally peeks the (re-sorted) head
