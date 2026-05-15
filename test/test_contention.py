@@ -433,22 +433,24 @@ class TestComputeMinTopology(unittest.TestCase):
         self.assertEqual(wrap.eff_bw_gbps, self.link_speed_gbps)  # each link flow_count == 1
         self.assertEqual(wrap.eff_lat_ns, 3 * self.link_lat_ns)
 
-    def test_bottleneck_dominates_when_one_shared_link(self):
-        """When two jobs share a single link, the edge that crosses it sees
-        eff_bw_gbps = link.speed_gbps / 2 even though other links on the path
-        have flow_count == 1."""
-        # Job A and Job B on row 0 with overlapping wraparounds.
-        # Fixture from the link-flow tests' wraparound-share case.
+    def test_all_links_shared_between_two_jobs_on_same_row(self):
+        """When two (2,1) jobs are placed at [x0-y0,x1-y0] and
+        [x2-y0,x3-y0], all 4 +x links of row y=0 are shared between them
+        (forward edges and wrap edges interleave around the ring).
+        Every link sees flow_count == 2, so every edge of either job's
+        min topology has eff_bw_gbps == speed_gbps / 2."""
         job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
         job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
         self.cluster.execute(job_a)
         self.cluster.execute(job_b)
-        # Job A's wrap edge (rank 1 -> 0) goes x1->x2, x2->x3, x3->x0.
-        # All three of those links are shared with Job B (B's wrap goes
-        # x3->x0, x0->x1, x1->x2; B's forward goes x2->x3). Each shared link
-        # has flow_count == 2.
         topo_a = self.model.computeMinTopology(job_a)
-        wrap_a = topo_a[1]  # the (1, 0) edge
+        # Forward edge (rank 0 -> 1) routes x0-y0 -> x1-y0; that link is
+        # shared by job_b's wrap, so flow_count == 2.
+        forward_a = topo_a[0]
+        self.assertEqual(forward_a.eff_bw_gbps, self.link_speed_gbps / 2)
+        # Wrap edge (rank 1 -> 0) routes x1->x2->x3->x0; all 3 links shared
+        # with job_b, so flow_count == 2 on each.
+        wrap_a = topo_a[1]
         self.assertEqual(wrap_a.eff_bw_gbps, self.link_speed_gbps / 2)
 
     def test_self_contention_two_edges_same_link(self):

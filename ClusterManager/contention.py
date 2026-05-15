@@ -49,6 +49,10 @@ class ContentionModel:
         For each comm-pattern pair:
           eff_bw_gbps = min over path links of (link.speed_gbps / link.flow_count)
           eff_lat_ns  = sum over path links of link.latency_ns
+
+        Precondition: `job` must have been passed to Cluster.execute() so that
+        flow_count >= 1 on every link of every routed path; calling on an
+        un-executed torus job raises ZeroDivisionError on the per-link division.
         """
         edges: MinTopology = []
         for src_rank, dst_rank, links in self.cluster.routeJobPaths(job):
@@ -59,9 +63,9 @@ class ContentionModel:
                     MinTopoEdge(src_rank, dst_rank, float("inf"), 0.0)
                 )
                 continue
-            eff_bw = min(l.speed_gbps / l.flow_count for l in links)
-            eff_lat = sum(l.latency_ns for l in links)
-            edges.append(MinTopoEdge(src_rank, dst_rank, eff_bw, eff_lat))
+            eff_bw_gbps = min(l.speed_gbps / l.flow_count for l in links)
+            eff_lat_ns = sum(l.latency_ns for l in links)
+            edges.append(MinTopoEdge(src_rank, dst_rank, eff_bw_gbps, eff_lat_ns))
         return edges
 
     def slowdown(self, running_jobs: Iterable[Job]) -> dict[int, float]:
