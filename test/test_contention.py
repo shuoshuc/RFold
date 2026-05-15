@@ -210,7 +210,15 @@ class TestContentionModel(unittest.TestCase):
 
 
 class _TwoConcurrentSlow(ContentionModel):
-    """Slowdown 2.0 whenever 2+ impacted jobs are present, 1.0 otherwise."""
+    """Slowdown 2.0 whenever 2+ impacted jobs are present, 1.0 otherwise.
+
+    Note: under the new partial-recompute model, the slowdown function only
+    sees the impacted subset of running jobs. The TestClusterManagerContention
+    `_run` helper mocks Cluster.routeJobPaths so every job appears to share a
+    single synthetic link, which forces every running job into the impacted
+    set on every event. With that mock setup, len(impacted_jobs) equals
+    len(running_jobs) and this subclass behaves identically to its
+    pre-refactor "2x if 2+ jobs running" semantics."""
     def slowdown(self, impacted_jobs, min_topologies):
         jobs = list(impacted_jobs)
         s = 2.0 if len(jobs) >= 2 else 1.0
@@ -600,6 +608,27 @@ class TestOnAdmitOnComplete(unittest.TestCase):
         called_uuids = sorted(call.args[0].uuid for call in spy.call_args_list)
         # Both Job A (impacted via shared wrap links) and Job B (trigger) are touched.
         self.assertEqual(called_uuids, [1, 2])
+
+    def test_overlapping_complete_touches_only_remaining_job(self):
+        """Two jobs with shared wraparound paths: completing one calls
+        applySlowdown only on the remaining job (the completed job is
+        excluded from the impacted set)."""
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
+        # Both jobs running and admitted.
+        self.cluster.execute(job_a)
+        self.model.onAdmit(job_a, [job_a])
+        self.cluster.execute(job_b)
+        self.model.onAdmit(job_b, [job_a, job_b])
+        # Now complete Job A. Caller (Manager) removes A from running set
+        # and decrements link flows BEFORE calling onComplete.
+        self.cluster.complete(job_a)
+        with patch.object(Job, "applySlowdown", autospec=True) as spy:
+            self.model.onComplete(job_a, [job_b])
+        called_uuids = [call.args[0].uuid for call in spy.call_args_list]
+        # Only Job B (the remaining impacted job) should be touched; Job A is
+        # excluded from the impacted set on completion.
+        self.assertEqual(called_uuids, [2])
 
 
 if __name__ == "__main__":

@@ -73,9 +73,10 @@ class ClusterManager:
         # The scheduling policy module makes scheduling decisions given the
         # cluster state and a job.
         self.scheduler = SchedulingPolicy(env, cluster)
-        # The contention model recomputes per-job slowdowns whenever the
-        # placement set changes (job admitted or completed) and pushes new
-        # factors onto each running Job via Job.applySlowdown.
+        # The contention model updates slowdown factors for impacted jobs
+        # (those sharing links with the triggering job) whenever the placement
+        # set changes (job admitted or completed) and pushes new factors onto
+        # each impacted Job via Job.applySlowdown.
         self.contention_model = ContentionModel(env, cluster)
         # A queue of newly arrived jobs, sorted by arrival times.
         # [Producer]: WorkloadGen module
@@ -275,18 +276,19 @@ class ClusterManager:
         """
         Send the job to the cluster for execution. Timestamp the job with the scheduled
         time, register its initial contention state, and move it to the running queue
-        for continuous tracking. Recompute slowdowns for all running jobs (the
-        placement set has just changed) and re-sort the running queue accordingly.
+        for continuous tracking. Update slowdown factors for the admitted job and any
+        other running job that shares a physical link with it (the placement set has
+        just changed) and re-sort the running queue accordingly.
         """
         # Scheduled time = time when the job is executed.
         job.updateQueueingTime(self.env.now)
         # Initialize contention-tracking state for this brand-new running job.
-        # The recompute below will set last_event_time_sec and the real slowdown,
-        # then overwrite priority via applySlowdown.
+        # The onAdmit call below will set last_event_time_sec and the real
+        # slowdown, then overwrite priority via applySlowdown.
         job.work_done_ideal_sec = 0.0
         job.last_event_time_sec = None
         job.current_slowdown = 1.0
-        # Placeholder priority; recompute below overwrites it.
+        # Placeholder priority; onAdmit below overwrites it.
         job.priority = self.env.now + job.duration_sec
         self.cluster.execute(job)
         # Move the running job into the running queue.
@@ -297,8 +299,8 @@ class ClusterManager:
         self.contention_model.onAdmit(job, self.running_job_queue.slist)
         self._rebuildRunningQueue()
         # Wake the guard. If it was on a timer, interrupt it; if it was waiting
-        # for a job to be enqueued, signal arrival. We always interrupt under
-        # the recompute model because any running job's ETA may have changed.
+        # for a job to be enqueued, signal arrival. We always interrupt because
+        # any impacted job's ETA may have changed.
         if self.next_completion > self.env.now:
             self.running_guard_proc.interrupt()
         else:
@@ -308,8 +310,8 @@ class ClusterManager:
     def completeOnCluster(self, job: Job):
         """
         Send the completing job to the cluster to free up resources. Update the
-        job's stats. Recompute slowdowns for the remaining running jobs (their
-        contention landscape just changed) and re-sort the running queue.
+        job's stats. Update slowdown factors for the remaining running jobs that
+        shared a link with the completed job and re-sort the running queue.
         """
         self.cluster.complete(job)
         # Update job statistics.
@@ -359,8 +361,8 @@ class ClusterManager:
 
     def _rebuildRunningQueue(self):
         """
-        Re-sort the running queue after contention_model.recompute mutated
-        job.priority. SortedList sorts on insert via Job's order=True
+        Re-sort the running queue after contention_model.onAdmit / onComplete
+        mutated job.priority. SortedList sorts on insert via Job's order=True
         comparator, so we have to dequeue everything and re-insert.
         """
         items = list(self.running_job_queue.slist)
