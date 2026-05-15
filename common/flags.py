@@ -151,7 +151,7 @@ class Flags:
         self.parser.add_argument(
             "--link_latency_ns",
             type=float,
-            default=100.0,
+            default=500.0,
             help="Per-link propagation+forwarding latency in nanoseconds, applied to every Link.",
         )
         self.parser.add_argument(

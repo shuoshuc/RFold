@@ -415,7 +415,7 @@ class TestComputeMinTopology(unittest.TestCase):
         self.env = simpy.Environment()
         self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
         self.model = ContentionModel(self.env, self.cluster)
-        # Per-link latency is uniform from FLAGS.link_latency_ns (default 100.0).
+        # Per-link latency is uniform from FLAGS.link_latency_ns (default 500.0).
         sample_link = next(iter(self.cluster.links.values()))
         self.link_speed_gbps = sample_link.speed_gbps
         self.link_lat_ns = sample_link.latency_ns
