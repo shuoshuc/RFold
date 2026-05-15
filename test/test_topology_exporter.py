@@ -170,5 +170,61 @@ class TestTopologyExporterContention(unittest.TestCase):
         self.assertAlmostEqual(rows_b[1][0], expected)
 
 
+class TestTopologyExporterFileOps(unittest.TestCase):
+    """Overwrite semantics and lazy directory creation."""
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
+        self.model = ContentionModel(self.env, self.cluster)
+        self.tmpdir = tempfile.mkdtemp(prefix="topo_export_test_")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _read_rows(self, path):
+        with open(path) as f:
+            lines = [ln.rstrip("\n") for ln in f]
+        return [[float(v) for v in ln.split()] for ln in lines[1:-1]]
+
+    def test_export_creates_missing_directory(self):
+        nested = os.path.join(self.tmpdir, "does", "not", "exist", "yet")
+        self.assertFalse(os.path.isdir(nested))
+        exporter = TopologyExporter(self.model, nested)
+        job = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job)
+        exporter.export(job)
+        self.assertTrue(os.path.isfile(os.path.join(nested, "job_1_bw.txt")))
+
+    def test_second_export_overwrites_first(self):
+        """A second admit changes contention; the file should reflect only the
+        latest state, not append a second matrix or keep the older one."""
+        sample_link = next(iter(self.cluster.links.values()))
+        speed = sample_link.speed_gbps
+        exporter = TopologyExporter(self.model, self.tmpdir)
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        self.cluster.execute(job_a)
+        exporter.export(job_a)
+        bw_path = os.path.join(self.tmpdir, "job_1_bw.txt")
+        rows = self._read_rows(bw_path)
+        self.assertAlmostEqual(rows[0][1], speed / 8.0)  # full bandwidth
+
+        # Admit a sharing peer; export job_a again.
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
+        self.cluster.execute(job_b)
+        exporter.export(job_a)
+        rows2 = self._read_rows(bw_path)
+        # Now bottlenecked at speed/2.
+        self.assertAlmostEqual(rows2[0][1], (speed / 2) / 8.0)
+        # File still has exactly N rows + header + trailer (no append).
+        with open(bw_path) as f:
+            lines = [ln for ln in f.read().splitlines() if ln]
+        # 1 header + 2 data rows + 1 trailer == 4 non-empty lines.
+        self.assertEqual(len(lines), 4)
+        self.assertEqual(lines[0], "BW 0")
+        self.assertEqual(lines[-1], "END")
+
+
 if __name__ == "__main__":
     unittest.main()
