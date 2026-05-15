@@ -226,5 +226,73 @@ class TestTopologyExporterFileOps(unittest.TestCase):
         self.assertEqual(lines[-1], "END")
 
 
+class TestTopologyExporterIntegration(unittest.TestCase):
+    """End-to-end: feed two overlapping T2D jobs through ClusterManager with
+    FLAGS.export_topology temporarily on. After both jobs complete, both
+    jobs' files exist on disk reflecting their last in-flight snapshot."""
+
+    def setUp(self):
+        from common.flags import FLAGS
+        # FLAGS is a singleton built from argparse; mutate args directly and
+        # restore in tearDown. patch.object is unreliable against argparse
+        # Namespace because of how attribute introspection works.
+        self._old_export = FLAGS.args.export_topology
+        self._old_dir = FLAGS.args.topology_export_dir
+        self.tmpdir = tempfile.mkdtemp(prefix="topo_export_test_")
+        FLAGS.args.export_topology = True
+        FLAGS.args.topology_export_dir = self.tmpdir
+
+    def tearDown(self):
+        import shutil
+        from common.flags import FLAGS
+        FLAGS.args.export_topology = self._old_export
+        FLAGS.args.topology_export_dir = self._old_dir
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_files_refresh_on_admit_and_complete(self):
+        from unittest.mock import patch
+        from ClusterManager.manager import ClusterManager
+        from ClusterManager.scheduling import SchedDecision
+
+        env = simpy.Environment()
+        cluster = Cluster(env, spec=spec_parser(C1_SPEC))
+        sample_link = next(iter(cluster.links.values()))
+        speed = sample_link.speed_gbps
+
+        # Two T2D jobs on row y=0: arrive 1s apart, share +x links.
+        j1 = _make_t2d_job(uuid=1, shape=(2, 1),
+                           node_ranks=["x0-y0", "x1-y0"], duration_sec=5)
+        j2 = _make_t2d_job(uuid=2, shape=(2, 1),
+                           node_ranks=["x2-y0", "x3-y0"], duration_sec=2)
+        j2.arrival_time_sec = 1
+
+        mgr = ClusterManager(env, cluster=cluster, sim_njobs=2)
+
+        def feeder():
+            yield env.timeout(0)
+            mgr.submitJob(j1)
+            yield env.timeout(1)
+            mgr.submitJob(j2)
+
+        with patch(
+            "ClusterManager.scheduling.SchedulingPolicy.place",
+            side_effect=lambda j: (SchedDecision.ADMIT, j),
+        ):
+            env.process(mgr.schedule())
+            env.process(feeder())
+            env.run()
+
+        # After both jobs complete, j1's last snapshot was taken right after
+        # j2 completed (j1 alone again): bw cell = speed/8.
+        bw_path = os.path.join(self.tmpdir, "job_1_bw.txt")
+        self.assertTrue(os.path.isfile(bw_path))
+        with open(bw_path) as f:
+            lines = [ln.rstrip("\n") for ln in f]
+        rows = [[float(v) for v in ln.split()] for ln in lines[1:-1]]
+        self.assertAlmostEqual(rows[0][1], speed / 8.0)
+        # j2's file also exists (last snapshot taken while j2 was running).
+        self.assertTrue(os.path.isfile(os.path.join(self.tmpdir, "job_2_bw.txt")))
+
+
 if __name__ == "__main__":
     unittest.main()
