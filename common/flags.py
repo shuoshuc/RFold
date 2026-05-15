@@ -160,6 +160,24 @@ class Flags:
             default="",
             help=("Directory to write all stats to."),
         )
+        self.parser.add_argument(
+            "--export_topology",
+            action="store_true",
+            help=(
+                "If set, write per-job bandwidth (GB/s) and latency (ns) "
+                "matrices to FLAGS.topology_export_dir after every job admit "
+                "or completion event. Files are overwritten on each call."
+            ),
+        )
+        self.parser.add_argument(
+            "--topology_export_dir",
+            type=str,
+            default="output/topology/",
+            help=(
+                "Directory for per-job topology files. Created on first "
+                "write. Only used when --export_topology is set."
+            ),
+        )
         self.args = self.parser.parse_args()
 
     @property
@@ -237,6 +255,14 @@ class Flags:
     @property
     def stats_outdir(self):
         return self.args.stats_outdir
+
+    @property
+    def export_topology(self):
+        return self.args.export_topology
+
+    @property
+    def topology_export_dir(self):
+        return self.args.topology_export_dir
 
 
 # Instantiate a global flags object.
