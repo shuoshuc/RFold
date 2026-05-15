@@ -126,5 +126,49 @@ class TestTopologyExporterFormat(unittest.TestCase):
         self.assertEqual(lt_rows[1][1], 0.0)
 
 
+class TestTopologyExporterContention(unittest.TestCase):
+    """Two jobs sharing a +x link on row y=0: both jobs' wrap edges land on
+    the link x2-y0 -> x3-y0 (via job_b's forward) so flow_count == 2 there.
+    The exported bw cell for each job's wrap edge must show eff_bw_gbps / 2 / 8."""
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
+        self.model = ContentionModel(self.env, self.cluster)
+        self.tmpdir = tempfile.mkdtemp(prefix="topo_export_test_")
+        self.exporter = TopologyExporter(self.model, self.tmpdir)
+        sample_link = next(iter(self.cluster.links.values()))
+        self.link_speed_gbps = sample_link.speed_gbps
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _read_rows(self, path):
+        with open(path) as f:
+            lines = [ln.rstrip("\n") for ln in f]
+        return [[float(v) for v in ln.split()] for ln in lines[1:-1]]
+
+    def test_shared_link_halves_bw_cell(self):
+        """Mirrors test_all_links_shared_between_two_jobs_on_same_row in
+        test_contention.py: two (2,1) jobs on y=0 share all +x links of that
+        row, so every comm-pattern edge of each job has eff_bw = speed/2.
+        Exported cells therefore equal (speed/2)/8."""
+        job_a = _make_t2d_job(uuid=1, shape=(2, 1), node_ranks=["x0-y0", "x1-y0"])
+        job_b = _make_t2d_job(uuid=2, shape=(2, 1), node_ranks=["x2-y0", "x3-y0"])
+        self.cluster.execute(job_a)
+        self.cluster.execute(job_b)
+        self.exporter.exportRunning([job_a, job_b])
+
+        expected = (self.link_speed_gbps / 2) / 8.0
+        rows_a = self._read_rows(os.path.join(self.tmpdir, "job_1_bw.txt"))
+        rows_b = self._read_rows(os.path.join(self.tmpdir, "job_2_bw.txt"))
+        # Both ring edges (0,1) and (1,0) are bottlenecked at speed/2.
+        self.assertAlmostEqual(rows_a[0][1], expected)
+        self.assertAlmostEqual(rows_a[1][0], expected)
+        self.assertAlmostEqual(rows_b[0][1], expected)
+        self.assertAlmostEqual(rows_b[1][0], expected)
+
+
 if __name__ == "__main__":
     unittest.main()
