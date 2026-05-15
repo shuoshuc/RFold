@@ -15,7 +15,7 @@ def main():
 
     # Columns to plot
     columns = [
-        ('no contention solo (msec)', 'Baseline'),
+        ('no contention solo (msec)', 'Ideal'),
         ('firstfit + 4 nodes bg (msec)', 'Firstfit'),
         ('space filling curve + 4 nodes bg (msec)', 'Space Filling Curve'),
         ('L1 clustering + 4 nodes bg (msec)', 'L1 Clustering'),
