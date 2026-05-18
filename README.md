@@ -29,3 +29,10 @@ To run all unit tests, execute:
 ```bash
 uv run python -m unittest
 ```
+
+# Astra-sim Docker image
+
+To build the image, run:
+```bash
+docker buildx build --load -t rfold-astra .
+```
