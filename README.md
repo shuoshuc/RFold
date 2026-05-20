@@ -37,18 +37,6 @@ To build the image, run:
 docker buildx build --load -t rfold-astra .
 ```
 
-## In-image layout
-
-- `/app/configs/` — static configs baked into the image (symlinks into
-  `astra-sim-artifacts/examples/fluid-model/inputs/`):
-  `RemoteMemory.json`, `network.yml`, `sys.json`.
-- `/app/tools/` — symlink to `astra-sim-artifacts/tools/`.
-- `/app/inputs/` — **not pre-created**. Bind-mount the host directory
-  containing your dynamic inputs (`bw_schedule.txt`,
-  `latency_schedule.txt`) here at run time.
-- `/app/output/` — **not pre-created**. Bind-mount a host directory here
-  to collect results (`jct.csv`).
-
 ## Running the fluid-model experiment
 
 ```bash
@@ -61,6 +49,4 @@ docker run --rm \
   bash /app/astra-sim-artifacts/examples/fluid-model/run.sh <JOB_SHAPE>
 ```
 
-`<JOB_SHAPE>` is the torus shape in `XxYxZ` form (e.g., `2x2x1`). The
-host's `schedules` directory must contain `bw_schedule.txt` and
-`latency_schedule.txt`.
+`<JOB_SHAPE>` is the torus shape in `XxYxZ` form (e.g., `2x2x1`).
