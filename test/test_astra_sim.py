@@ -59,5 +59,32 @@ class TestBuildBwMatrix(unittest.TestCase):
         self.assertEqual(M[1][0], 12.5)
 
 
+class TestBuildLtMatrix(unittest.TestCase):
+
+    def test_default_500_on_neighbors(self):
+        M = astra_sim.build_lt_matrix((2, 2, 1))
+        self.assertEqual(M[0][1], 500.0)
+        self.assertEqual(M[1][0], 500.0)
+        self.assertEqual(M[0][2], 500.0)
+        self.assertEqual(M[2][0], 500.0)
+        # Non-neighbor
+        self.assertEqual(M[0][3], 0.0)
+        # Diagonal
+        self.assertEqual(M[0][0], 0.0)
+
+    def test_shape_2x2x2_bidirectional_axis2(self):
+        # In (2,2,2), axis-2 pairs are bidirectional links between
+        # rank k and rank k+4 for k in 0..3.
+        M = astra_sim.build_lt_matrix((2, 2, 2))
+        for k in range(4):
+            self.assertEqual(M[k][k + 4], 500.0)
+            self.assertEqual(M[k + 4][k], 500.0)
+
+    def test_custom_default(self):
+        M = astra_sim.build_lt_matrix((2,), default=7.0)
+        self.assertEqual(M[0][1], 7.0)
+        self.assertEqual(M[1][0], 7.0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -49,3 +49,10 @@ def build_bw_matrix(
 ) -> list[list[float]]:
     """N×N bandwidth matrix; bidirectional torus neighbors = default."""
     return _torus_neighbor_matrix(shape, default)
+
+
+def build_lt_matrix(
+    shape: Tuple[int, ...], default: float = 500.0
+) -> list[list[float]]:
+    """N×N latency matrix (ns); bidirectional torus neighbors = default."""
+    return _torus_neighbor_matrix(shape, default)
