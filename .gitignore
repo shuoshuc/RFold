@@ -173,3 +173,6 @@ cython_debug/
 # Claude Code superpowers plans and specs (local-only, never commit)
 docs/superpowers/plans/
 docs/superpowers/specs/
+
+# Per-job astra-sim artifacts written under ./tmp/<uuid>/
+tmp/
