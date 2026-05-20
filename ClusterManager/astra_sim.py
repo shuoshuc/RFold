@@ -6,6 +6,7 @@ non-pure function is `run_astra`, which is the subprocess seam.
 """
 
 import re
+import subprocess
 from itertools import product
 from pathlib import Path
 from typing import Tuple
@@ -99,3 +100,34 @@ def parse_jct_sec(csv_path) -> float:
                 f"jct.csv at {csv_path}: first value '{tok}' is not numeric"
             )
     raise RuntimeError(f"jct.csv at {csv_path}: no numeric value found")
+
+
+def run_astra(uuid: int, shape: Tuple[int, ...], tmp_root) -> float:
+    """
+    Materialize per-job inputs under <tmp_root>/<uuid>/inputs/, invoke
+    run_astra.sh, and return the parsed JCT in seconds.
+
+    Raises subprocess.CalledProcessError if the container exits non-zero
+    or RuntimeError if jct.csv is malformed/missing.
+    """
+    tmp_root = Path(tmp_root)
+    uuid_dir = tmp_root / str(uuid)
+    inputs_dir = uuid_dir / "inputs"
+    outputs_dir = uuid_dir / "outputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    bw = build_bw_matrix(shape)
+    lt = build_lt_matrix(shape)
+    write_schedule(inputs_dir / "bw_schedule.txt", bw, "BW")
+    write_schedule(inputs_dir / "latency_schedule.txt", lt, "LT")
+
+    shape_str = "x".join(str(s) for s in shape)
+    cmd = [
+        "bash", "./run_astra.sh", shape_str,
+        "--input-dir", str(inputs_dir),
+        "--output-dir", str(outputs_dir),
+    ]
+    subprocess.run(cmd, check=True)
+
+    return parse_jct_sec(outputs_dir / "jct.csv")

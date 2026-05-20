@@ -180,5 +180,69 @@ class TestParseJctSec(unittest.TestCase):
             astra_sim.parse_jct_sec(p)
 
 
+class TestRunAstra(unittest.TestCase):
+
+    def setUp(self):
+        import tempfile
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_run_astra_writes_inputs_invokes_subprocess_and_parses_jct(self):
+        from pathlib import Path
+        from unittest.mock import patch
+
+        tmp_root = Path(self.tmpdir)
+
+        # Simulate astra-sim by writing jct.csv into the outputs dir.
+        def fake_run(cmd, check):
+            # Validate invocation shape.
+            self.assertEqual(cmd[0], "bash")
+            self.assertEqual(cmd[1], "./run_astra.sh")
+            self.assertEqual(cmd[2], "2x2x1")
+            self.assertIn("--input-dir", cmd)
+            self.assertIn("--output-dir", cmd)
+            self.assertTrue(check)
+            out_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            (out_dir / "jct.csv").write_text("2500000000\n")
+            class _R:
+                returncode = 0
+            return _R()
+
+        with patch.object(astra_sim.subprocess, "run", side_effect=fake_run):
+            result_sec = astra_sim.run_astra(
+                uuid=42, shape=(2, 2, 1), tmp_root=tmp_root
+            )
+
+        # JCT 2.5e9 ns -> 2.5 s.
+        self.assertEqual(result_sec, 2.5)
+        # Inputs were written.
+        uuid_dir = tmp_root / "42"
+        self.assertTrue((uuid_dir / "inputs" / "bw_schedule.txt").exists())
+        self.assertTrue((uuid_dir / "inputs" / "latency_schedule.txt").exists())
+        # BW file is well-formed.
+        bw_text = (uuid_dir / "inputs" / "bw_schedule.txt").read_text().splitlines()
+        self.assertEqual(bw_text[0], "BW")
+        self.assertEqual(bw_text[-1], "END")
+        # N rows in the body (N = 2*2*1 = 4).
+        self.assertEqual(len(bw_text), 6)  # tag + 4 rows + END
+
+    def test_run_astra_propagates_subprocess_error(self):
+        from pathlib import Path
+        from unittest.mock import patch
+        import subprocess as sp
+
+        def fake_run(cmd, check):
+            raise sp.CalledProcessError(returncode=1, cmd=cmd)
+
+        with patch.object(astra_sim.subprocess, "run", side_effect=fake_run):
+            with self.assertRaises(sp.CalledProcessError):
+                astra_sim.run_astra(
+                    uuid=7, shape=(2,), tmp_root=Path(self.tmpdir)
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
