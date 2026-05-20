@@ -5,7 +5,6 @@ live here so they can be unit-tested without spawning Docker. The only
 non-pure function is `run_astra`, which is the subprocess seam.
 """
 
-import re
 import subprocess
 from itertools import product
 from pathlib import Path
@@ -64,15 +63,22 @@ def build_lt_matrix(
 def write_schedule(path, matrix: list[list[float]], tag: str) -> None:
     """
     Write a fluid-model schedule file at `path`. Format:
-        <tag>
+        <tag> 0
         <row 0: N space-separated floats>
         ...
         <row N-1>
         END
+
+    The "0" on the tag line is the topology ID. astra-sim's parser
+    (astra-sim/network_frontend/analytical/reconfigurable/main.cc) does
+    `std::stoi(line.substr(3))` on the tag line and aborts if no ID is
+    present; topo_id 0 is the required initial-topology entry. We only
+    emit one block per file because our integration is single-topology
+    per job (no in-run reconfiguration).
     `path` accepts anything pathlib.Path or os.PathLike-like.
     """
     with open(path, "w") as f:
-        f.write(f"{tag}\n")
+        f.write(f"{tag} 0\n")
         for row in matrix:
             f.write(" ".join(repr(x) for x in row) + "\n")
         f.write("END\n")
@@ -80,26 +86,33 @@ def write_schedule(path, matrix: list[list[float]], tag: str) -> None:
 
 def parse_jct_sec(csv_path) -> float:
     """
-    Read jct.csv and return the first numeric value, interpreted as
-    nanoseconds, converted to seconds. Raises RuntimeError if the file
-    is missing, empty, or the first token is not numeric.
+    Read jct.csv (astra-sim format: `Job,JCT (nsec)` header followed by
+    `<job_id>,<jct_ns>` rows) and return the first job's JCT in seconds.
+
+    Raises RuntimeError if the file is missing, empty, has no data row,
+    or the JCT cell is not numeric.
     """
     p = Path(csv_path)
     if not p.exists():
         raise RuntimeError(f"jct.csv not found at {csv_path}")
-    text = p.read_text().strip()
-    if not text:
+    lines = [line.strip() for line in p.read_text().splitlines() if line.strip()]
+    if not lines:
         raise RuntimeError(f"jct.csv at {csv_path} is empty")
-    for tok in re.split(r"[,\s]+", text):
-        if not tok:
-            continue
-        try:
-            return float(tok) / 1e9
-        except ValueError:
-            raise RuntimeError(
-                f"jct.csv at {csv_path}: first value '{tok}' is not numeric"
-            )
-    raise RuntimeError(f"jct.csv at {csv_path}: no numeric value found")
+    if lines[0].startswith("Job"):
+        lines = lines[1:]
+    if not lines:
+        raise RuntimeError(f"jct.csv at {csv_path}: no data rows")
+    parts = lines[0].split(",")
+    if len(parts) < 2:
+        raise RuntimeError(
+            f"jct.csv at {csv_path}: data row '{lines[0]}' has < 2 columns"
+        )
+    try:
+        return float(parts[1].strip()) / 1e9
+    except ValueError:
+        raise RuntimeError(
+            f"jct.csv at {csv_path}: JCT cell '{parts[1]}' is not numeric"
+        )
 
 
 def run_astra(uuid: int, shape: Tuple[int, ...], tmp_root) -> float:

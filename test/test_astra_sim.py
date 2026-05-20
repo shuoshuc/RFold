@@ -105,7 +105,10 @@ class TestWriteSchedule(unittest.TestCase):
             lines = f.read().splitlines()
         # 1 tag + 2 rows + 1 END = 4 lines.
         self.assertEqual(len(lines), 4)
-        self.assertEqual(lines[0], "BW")
+        # Tag line includes topo_id 0: astra-sim's parser does
+        # std::stoi(line.substr(3)) on the tag line and aborts if there
+        # is no ID after the tag.
+        self.assertEqual(lines[0], "BW 0")
         self.assertEqual(lines[-1], "END")
         # Body rows have N space-separated numeric fields.
         for row_idx in (1, 2):
@@ -121,7 +124,7 @@ class TestWriteSchedule(unittest.TestCase):
         astra_sim.write_schedule(path, M, "LT")
         with path.open() as f:
             head = f.readline().strip()
-        self.assertEqual(head, "LT")
+        self.assertEqual(head, "LT 0")
 
     def test_single_cell_matrix(self):
         from pathlib import Path
@@ -129,7 +132,7 @@ class TestWriteSchedule(unittest.TestCase):
         astra_sim.write_schedule(path, [[0.0]], "BW")
         with path.open() as f:
             lines = f.read().splitlines()
-        self.assertEqual(lines, ["BW", "0.0", "END"])
+        self.assertEqual(lines, ["BW 0", "0.0", "END"])
 
 
 class TestParseJctSec(unittest.TestCase):
@@ -148,21 +151,26 @@ class TestParseJctSec(unittest.TestCase):
         p.write_text(body)
         return p
 
-    def test_single_integer_ns_to_s(self):
-        p = self._write("jct.csv", "1500000000\n")
+    # Real jct.csv format from astra-sim: header line then comma-separated
+    # rows of "<job_id>,<jct_ns>". One row per job.
+
+    def test_single_job_csv(self):
+        p = self._write(
+            "jct.csv",
+            "Job,JCT (nsec)\nJ0,1500000000\n",
+        )
         self.assertEqual(astra_sim.parse_jct_sec(p), 1.5)
 
     def test_scientific_notation(self):
-        p = self._write("jct.csv", "1.5e9")
+        p = self._write("jct.csv", "Job,JCT (nsec)\nJ0,1.5e9\n")
         self.assertEqual(astra_sim.parse_jct_sec(p), 1.5)
 
-    def test_takes_first_of_multiple(self):
-        p = self._write("jct.csv", "2000000000,3000000000\n")
+    def test_takes_first_data_row_when_multiple_jobs(self):
+        p = self._write(
+            "jct.csv",
+            "Job,JCT (nsec)\nJ0,2000000000\nJ1,3000000000\n",
+        )
         self.assertEqual(astra_sim.parse_jct_sec(p), 2.0)
-
-    def test_whitespace_separated(self):
-        p = self._write("jct.csv", "  4000000000   5000000000\n")
-        self.assertEqual(astra_sim.parse_jct_sec(p), 4.0)
 
     def test_missing_file_raises(self):
         from pathlib import Path
@@ -174,8 +182,13 @@ class TestParseJctSec(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             astra_sim.parse_jct_sec(p)
 
-    def test_non_numeric_raises(self):
-        p = self._write("jct.csv", "abc\n")
+    def test_header_only_raises(self):
+        p = self._write("jct.csv", "Job,JCT (nsec)\n")
+        with self.assertRaises(RuntimeError):
+            astra_sim.parse_jct_sec(p)
+
+    def test_non_numeric_jct_raises(self):
+        p = self._write("jct.csv", "Job,JCT (nsec)\nJ0,abc\n")
         with self.assertRaises(RuntimeError):
             astra_sim.parse_jct_sec(p)
 
@@ -206,7 +219,7 @@ class TestRunAstra(unittest.TestCase):
             self.assertIn("--output-dir", cmd)
             self.assertTrue(check)
             out_dir = Path(cmd[cmd.index("--output-dir") + 1])
-            (out_dir / "jct.csv").write_text("2500000000\n")
+            (out_dir / "jct.csv").write_text("Job,JCT (nsec)\nJ0,2500000000\n")
             class _R:
                 returncode = 0
             return _R()
@@ -224,7 +237,7 @@ class TestRunAstra(unittest.TestCase):
         self.assertTrue((uuid_dir / "inputs" / "latency_schedule.txt").exists())
         # BW file is well-formed.
         bw_text = (uuid_dir / "inputs" / "bw_schedule.txt").read_text().splitlines()
-        self.assertEqual(bw_text[0], "BW")
+        self.assertEqual(bw_text[0], "BW 0")
         self.assertEqual(bw_text[-1], "END")
         # N rows in the body (N = 2*2*1 = 4).
         self.assertEqual(len(bw_text), 6)  # tag + 4 rows + END
