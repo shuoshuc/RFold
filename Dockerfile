@@ -124,11 +124,11 @@ RUN echo "/usr/local/lib" | tee /etc/ld.so.conf.d/topomatch.conf && ldconfig
 ### ============= astra-sim-artifacts (in-image) ==========
 WORKDIR /app
 RUN git clone https://github.com/shuoshuc/astra-sim-artifacts.git /app/astra-sim-artifacts
-RUN mkdir -p /app/inputs && \
-    ln -s /app/astra-sim-artifacts/examples/multitenant-reconfig/inputs/RemoteMemory.json /app/inputs/RemoteMemory.json && \
-    ln -s /app/astra-sim-artifacts/examples/multitenant-reconfig/inputs/network.yml       /app/inputs/network.yml && \
-    ln -s /app/astra-sim-artifacts/examples/multitenant-reconfig/inputs/sys.json          /app/inputs/sys.json && \
-    ln -s /app/astra-sim-artifacts/tools                                                  /app/tools
+RUN mkdir -p /app/configs && \
+    ln -s /app/astra-sim-artifacts/examples/fluid-model/inputs/RemoteMemory.json /app/configs/RemoteMemory.json && \
+    ln -s /app/astra-sim-artifacts/examples/fluid-model/inputs/network.yml       /app/configs/network.yml && \
+    ln -s /app/astra-sim-artifacts/examples/fluid-model/inputs/sys.json          /app/configs/sys.json && \
+    ln -s /app/astra-sim-artifacts/tools                                          /app/tools
 ### ======================================================
 
 
