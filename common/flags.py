@@ -178,7 +178,7 @@ class Flags:
                 "write. Only used when --export_topology is set."
             ),
         )
-        self.args = self.parser.parse_args()
+        self.args, _ = self.parser.parse_known_args()
 
     @property
     def sim_njobs(self):
