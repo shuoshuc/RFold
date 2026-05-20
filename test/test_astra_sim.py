@@ -132,5 +132,53 @@ class TestWriteSchedule(unittest.TestCase):
         self.assertEqual(lines, ["BW", "0.0", "END"])
 
 
+class TestParseJctSec(unittest.TestCase):
+
+    def setUp(self):
+        import tempfile
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _write(self, name: str, body: str):
+        from pathlib import Path
+        p = Path(self.tmpdir) / name
+        p.write_text(body)
+        return p
+
+    def test_single_integer_ns_to_s(self):
+        p = self._write("jct.csv", "1500000000\n")
+        self.assertEqual(astra_sim.parse_jct_sec(p), 1.5)
+
+    def test_scientific_notation(self):
+        p = self._write("jct.csv", "1.5e9")
+        self.assertEqual(astra_sim.parse_jct_sec(p), 1.5)
+
+    def test_takes_first_of_multiple(self):
+        p = self._write("jct.csv", "2000000000,3000000000\n")
+        self.assertEqual(astra_sim.parse_jct_sec(p), 2.0)
+
+    def test_whitespace_separated(self):
+        p = self._write("jct.csv", "  4000000000   5000000000\n")
+        self.assertEqual(astra_sim.parse_jct_sec(p), 4.0)
+
+    def test_missing_file_raises(self):
+        from pathlib import Path
+        with self.assertRaises(RuntimeError):
+            astra_sim.parse_jct_sec(Path(self.tmpdir) / "nope.csv")
+
+    def test_empty_file_raises(self):
+        p = self._write("jct.csv", "")
+        with self.assertRaises(RuntimeError):
+            astra_sim.parse_jct_sec(p)
+
+    def test_non_numeric_raises(self):
+        p = self._write("jct.csv", "abc\n")
+        with self.assertRaises(RuntimeError):
+            astra_sim.parse_jct_sec(p)
+
+
 if __name__ == "__main__":
     unittest.main()

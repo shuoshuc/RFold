@@ -5,7 +5,9 @@ live here so they can be unit-tested without spawning Docker. The only
 non-pure function is `run_astra`, which is the subprocess seam.
 """
 
+import re
 from itertools import product
+from pathlib import Path
 from typing import Tuple
 
 
@@ -73,3 +75,27 @@ def write_schedule(path, matrix: list[list[float]], tag: str) -> None:
         for row in matrix:
             f.write(" ".join(repr(x) for x in row) + "\n")
         f.write("END\n")
+
+
+def parse_jct_sec(csv_path) -> float:
+    """
+    Read jct.csv and return the first numeric value, interpreted as
+    nanoseconds, converted to seconds. Raises RuntimeError if the file
+    is missing, empty, or the first token is not numeric.
+    """
+    p = Path(csv_path)
+    if not p.exists():
+        raise RuntimeError(f"jct.csv not found at {csv_path}")
+    text = p.read_text().strip()
+    if not text:
+        raise RuntimeError(f"jct.csv at {csv_path} is empty")
+    for tok in re.split(r"[,\s]+", text):
+        if not tok:
+            continue
+        try:
+            return float(tok) / 1e9
+        except ValueError:
+            raise RuntimeError(
+                f"jct.csv at {csv_path}: first value '{tok}' is not numeric"
+            )
+    raise RuntimeError(f"jct.csv at {csv_path}: no numeric value found")
