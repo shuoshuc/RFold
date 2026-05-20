@@ -368,3 +368,67 @@ class TestClusterManagerWithFcfs(unittest.TestCase):
             self.assertEqual(job1_sched.completion_time_sec, 10)
             self.assertEqual(job1_sched.slowdown, 1)
             self.assertEqual(self.mgr.job_stats, {job1_sched.uuid: job1_sched})
+
+
+class TestSubmitJobRunsAstra(unittest.TestCase):
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.mock_cluster = MagicMock(spec=Cluster)
+        self.mgr = ClusterManager(
+            self.env, cluster=self.mock_cluster, sim_njobs=0
+        )
+        FLAGS.args.defer_sched_sec = 600
+
+    def _t2d_job(self, uuid=1):
+        return Job(
+            uuid=uuid,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+
+    def _clos_job(self, uuid=2):
+        return Job(
+            uuid=uuid,
+            topology=TopoType.CLOS,
+            shape=(1,),
+            size=1,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+
+    def test_torus_job_triggers_run_astra_sim(self):
+        with patch.object(
+            self.mgr.contention_model, "runAstraSim"
+        ) as mock_run:
+            self.mgr.submitJob(self._t2d_job())
+        mock_run.assert_called_once()
+
+    def test_clos_job_does_not_trigger_run_astra_sim(self):
+        with patch.object(
+            self.mgr.contention_model, "runAstraSim"
+        ) as mock_run:
+            self.mgr.submitJob(self._clos_job())
+        mock_run.assert_not_called()
+
+    def test_dropped_job_does_not_trigger_run_astra_sim(self):
+        # closed_loop_threshold gate fires before astra-sim.
+        self.mgr.closed_loop_threshold = 1e-9
+        # Pre-load new_job_queue with enough work to trip the gate.
+        big = Job(
+            uuid=0,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=1e6,
+            arrival_time_sec=0,
+        )
+        self.mgr.new_job_queue.enqueue(big)
+        with patch.object(
+            self.mgr.contention_model, "runAstraSim"
+        ) as mock_run:
+            self.mgr.submitJob(self._t2d_job(uuid=3))
+        mock_run.assert_not_called()

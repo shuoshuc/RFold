@@ -4,7 +4,7 @@ import simpy
 from Cluster.cluster import Cluster
 from typing import Generator, Optional
 
-from common.job import Job
+from common.job import Job, TopoType
 from common.flags import FLAGS
 from common.utils import Signal
 from ClusterManager.scheduling import SchedulingPolicy, SchedDecision
@@ -132,6 +132,12 @@ class ClusterManager:
                 f"dropping job: {job.short_print()}"
             )
             return
+        # Drive astra-sim for torus jobs before enqueueing so that
+        # job.astra_dur_sec is populated before any scheduler sees the
+        # job. Non-torus topologies (Clos, Mesh) have no fluid-model
+        # interpretation and are skipped.
+        if job.topology in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
+            self.contention_model.runAstraSim(job)
         self.new_job_queue.enqueue(job)
         logging.debug(f"t = {self.env.now}, enqueued: {job.short_print()}")
         if self.sim_njobs > 0:
