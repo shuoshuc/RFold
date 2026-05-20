@@ -56,3 +56,20 @@ def build_lt_matrix(
 ) -> list[list[float]]:
     """N×N latency matrix (ns); bidirectional torus neighbors = default."""
     return _torus_neighbor_matrix(shape, default)
+
+
+def write_schedule(path, matrix: list[list[float]], tag: str) -> None:
+    """
+    Write a fluid-model schedule file at `path`. Format:
+        <tag>
+        <row 0: N space-separated floats>
+        ...
+        <row N-1>
+        END
+    `path` accepts anything pathlib.Path or os.PathLike-like.
+    """
+    with open(path, "w") as f:
+        f.write(f"{tag}\n")
+        for row in matrix:
+            f.write(" ".join(repr(x) for x in row) + "\n")
+        f.write("END\n")

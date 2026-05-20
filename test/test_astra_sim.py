@@ -86,5 +86,51 @@ class TestBuildLtMatrix(unittest.TestCase):
         self.assertEqual(M[1][0], 7.0)
 
 
+class TestWriteSchedule(unittest.TestCase):
+
+    def setUp(self):
+        import tempfile
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_round_trip_bw(self):
+        from pathlib import Path
+        M = [[0.0, 50.0], [50.0, 0.0]]
+        path = Path(self.tmpdir) / "bw_schedule.txt"
+        astra_sim.write_schedule(path, M, "BW")
+        with path.open() as f:
+            lines = f.read().splitlines()
+        # 1 tag + 2 rows + 1 END = 4 lines.
+        self.assertEqual(len(lines), 4)
+        self.assertEqual(lines[0], "BW")
+        self.assertEqual(lines[-1], "END")
+        # Body rows have N space-separated numeric fields.
+        for row_idx in (1, 2):
+            tokens = lines[row_idx].split()
+            self.assertEqual(len(tokens), 2)
+            for t in tokens:
+                float(t)  # parses, otherwise raises ValueError
+
+    def test_round_trip_lt(self):
+        from pathlib import Path
+        M = [[0.0, 500.0], [500.0, 0.0]]
+        path = Path(self.tmpdir) / "latency_schedule.txt"
+        astra_sim.write_schedule(path, M, "LT")
+        with path.open() as f:
+            head = f.readline().strip()
+        self.assertEqual(head, "LT")
+
+    def test_single_cell_matrix(self):
+        from pathlib import Path
+        path = Path(self.tmpdir) / "bw.txt"
+        astra_sim.write_schedule(path, [[0.0]], "BW")
+        with path.open() as f:
+            lines = f.read().splitlines()
+        self.assertEqual(lines, ["BW", "0.0", "END"])
+
+
 if __name__ == "__main__":
     unittest.main()
