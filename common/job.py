@@ -37,6 +37,7 @@ class Job:
     shape: Tuple[Union[float, int], ...]
     size: Union[float, int]
     duration_sec: Optional[float] = None
+    astra_dur_sec: Optional[float] = None
     # ----- end of resource requirements -----
 
     # ----- allocation info -----
