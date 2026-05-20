@@ -5,6 +5,7 @@ live here so they can be unit-tested without spawning Docker. The only
 non-pure function is `run_astra`, which is the subprocess seam.
 """
 
+import logging
 import subprocess
 from itertools import product
 from pathlib import Path
@@ -141,6 +142,20 @@ def run_astra(uuid: int, shape: Tuple[int, ...], tmp_root) -> float:
         "--input-dir", str(inputs_dir),
         "--output-dir", str(outputs_dir),
     ]
-    subprocess.run(cmd, check=True)
+    # Redirect container output (STG progress, astra-sim statistics) to
+    # per-job log files so the RFold log stays clean. The files survive
+    # for post-mortem inspection.
+    log_stdout = outputs_dir / "astra_sim.log"
+    log_stderr = outputs_dir / "astra_sim.err"
+    with open(log_stdout, "w") as fout, open(log_stderr, "w") as ferr:
+        try:
+            subprocess.run(cmd, check=True, stdout=fout, stderr=ferr)
+        except subprocess.CalledProcessError:
+            logging.error(
+                "astra-sim failed for uuid=%s shape=%s; "
+                "see %s and %s for diagnostics",
+                uuid, shape, log_stdout, log_stderr,
+            )
+            raise
 
     return parse_jct_sec(outputs_dir / "jct.csv")

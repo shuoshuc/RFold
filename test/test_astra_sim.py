@@ -210,14 +210,14 @@ class TestRunAstra(unittest.TestCase):
         tmp_root = Path(self.tmpdir)
 
         # Simulate astra-sim by writing jct.csv into the outputs dir.
-        def fake_run(cmd, check):
-            # Validate invocation shape.
+        # **kwargs absorbs stdout/stderr file handles passed by run_astra.
+        def fake_run(cmd, **kwargs):
             self.assertEqual(cmd[0], "bash")
             self.assertEqual(cmd[1], "./run_astra.sh")
             self.assertEqual(cmd[2], "2x2x1")
             self.assertIn("--input-dir", cmd)
             self.assertIn("--output-dir", cmd)
-            self.assertTrue(check)
+            self.assertTrue(kwargs.get("check"))
             out_dir = Path(cmd[cmd.index("--output-dir") + 1])
             (out_dir / "jct.csv").write_text("Job,JCT (nsec)\nJ0,2500000000\n")
             class _R:
@@ -247,7 +247,7 @@ class TestRunAstra(unittest.TestCase):
         from unittest.mock import patch
         import subprocess as sp
 
-        def fake_run(cmd, check):
+        def fake_run(cmd, **kwargs):
             raise sp.CalledProcessError(returncode=1, cmd=cmd)
 
         with patch.object(astra_sim.subprocess, "run", side_effect=fake_run):
