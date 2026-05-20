@@ -4,8 +4,11 @@ import simpy
 from dataclasses import dataclass
 from typing import Iterable
 
+from pathlib import Path
+
 from common.job import Job
 from Cluster.cluster import Cluster
+from ClusterManager import astra_sim
 
 
 @dataclass(frozen=True)
@@ -167,3 +170,17 @@ class ContentionModel:
                     f"t = {self.env.now}, Job {job.uuid} slowdown "
                     f"{old_s} -> {new_s}, new ETA {job.priority}"
                 )
+
+    def runAstraSim(self, job: Job) -> None:
+        """
+        Drive a fluid-model astra-sim run for `job` and write the
+        resulting JCT (in seconds) onto `job.astra_dur_sec`. Assumes
+        the caller has already restricted invocation to torus jobs;
+        coerces `job.shape` to a tuple of ints.
+        """
+        shape = tuple(int(s) for s in job.shape)
+        job.astra_dur_sec = astra_sim.run_astra(
+            uuid=job.uuid,
+            shape=shape,
+            tmp_root=Path("./tmp"),
+        )

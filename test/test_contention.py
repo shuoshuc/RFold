@@ -652,5 +652,52 @@ class TestOnAdmitOnComplete(unittest.TestCase):
         self.assertEqual(called_uuids, [2])
 
 
+class TestRunAstraSim(unittest.TestCase):
+
+    def setUp(self):
+        self.env = simpy.Environment()
+        self.mock_cluster = MagicMock(spec=Cluster)
+        self.cm = ContentionModel(self.env, self.mock_cluster)
+
+    def test_run_astra_sim_sets_astra_dur_sec(self):
+        job = Job(
+            uuid=99,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        self.assertIsNone(job.astra_dur_sec)
+        with patch(
+            "ClusterManager.contention.astra_sim.run_astra",
+            return_value=3.14,
+        ) as mock_run:
+            self.cm.runAstraSim(job)
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["uuid"], 99)
+        self.assertEqual(kwargs["shape"], (2, 2))
+        self.assertEqual(job.astra_dur_sec, 3.14)
+
+    def test_run_astra_sim_coerces_float_shape_to_int(self):
+        # Job.shape is typed as Tuple[Union[float, int], ...]; for torus
+        # jobs we expect ints, but coerce defensively.
+        job = Job(
+            uuid=100,
+            topology=TopoType.T2D,
+            shape=(2.0, 2.0),
+            size=4,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        with patch(
+            "ClusterManager.contention.astra_sim.run_astra",
+            return_value=1.0,
+        ) as mock_run:
+            self.cm.runAstraSim(job)
+        self.assertEqual(mock_run.call_args.kwargs["shape"], (2, 2))
+
+
 if __name__ == "__main__":
     unittest.main()
