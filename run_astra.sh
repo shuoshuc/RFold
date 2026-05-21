@@ -47,4 +47,4 @@ sudo docker run --rm --ipc=host --ulimit nofile=65536:65536 \
     -v "${INPUT_DIR}":/app/inputs:ro \
     -v "${OUTPUT_DIR}":/app/output \
     rfold-astra \
-    bash /app/astra-sim-artifacts/examples/fluid-model/run.sh "${JOB_SHAPE}"
+    bash /app/astra-sim-artifacts/examples/fluid-model/run.sh "${JOB_SHAPE}" --mode mode2
