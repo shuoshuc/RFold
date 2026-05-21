@@ -659,7 +659,7 @@ class TestRunAstraSim(unittest.TestCase):
         self.mock_cluster = MagicMock(spec=Cluster)
         self.cm = ContentionModel(self.env, self.mock_cluster)
 
-    def test_run_astra_sim_sets_astra_dur_sec(self):
+    def test_run_astra_sim_sets_astra_ideal_dur_nsec(self):
         job = Job(
             uuid=99,
             topology=TopoType.T2D,
@@ -668,7 +668,7 @@ class TestRunAstraSim(unittest.TestCase):
             duration_sec=10.0,
             arrival_time_sec=0,
         )
-        self.assertIsNone(job.astra_dur_sec)
+        self.assertIsNone(job.astra_ideal_dur_nsec)
         with patch(
             "ClusterManager.contention.astra_sim.run_astra",
             return_value=3.14,
@@ -678,7 +678,7 @@ class TestRunAstraSim(unittest.TestCase):
         kwargs = mock_run.call_args.kwargs
         self.assertEqual(kwargs["uuid"], 99)
         self.assertEqual(kwargs["shape"], (2, 2))
-        self.assertEqual(job.astra_dur_sec, 3.14)
+        self.assertEqual(job.astra_ideal_dur_nsec, 3.14)
 
     def test_run_astra_sim_coerces_float_shape_to_int(self):
         # Job.shape is typed as Tuple[Union[float, int], ...]; for torus

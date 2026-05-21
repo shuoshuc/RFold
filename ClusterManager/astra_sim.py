@@ -3,6 +3,10 @@ Per-job inputs and orchestration for the rfold-astra fluid-model
 container. Pure helpers (matrix builders, file writers, jct.csv parser)
 live here so they can be unit-tested without spawning Docker. The only
 non-pure function is `run_astra`, which is the subprocess seam.
+
+JCT values are passed through in nanoseconds end-to-end — astra-sim
+emits ns in jct.csv, and consumers (e.g. Job.astra_ideal_dur_nsec)
+store ns directly.
 """
 
 import logging
@@ -85,10 +89,11 @@ def write_schedule(path, matrix: list[list[float]], tag: str) -> None:
         f.write("END\n")
 
 
-def parse_jct_sec(csv_path) -> float:
+def parse_jct_nsec(csv_path) -> float:
     """
     Read jct.csv (astra-sim format: `Job,JCT (nsec)` header followed by
-    `<job_id>,<jct_ns>` rows) and return the first job's JCT in seconds.
+    `<job_id>,<jct_ns>` rows) and return the first job's JCT in
+    nanoseconds (the same unit astra-sim emits).
 
     Raises RuntimeError if the file is missing, empty, has no data row,
     or the JCT cell is not numeric.
@@ -109,7 +114,7 @@ def parse_jct_sec(csv_path) -> float:
             f"jct.csv at {csv_path}: data row '{lines[0]}' has < 2 columns"
         )
     try:
-        return float(parts[1].strip()) / 1e9
+        return float(parts[1].strip())
     except ValueError:
         raise RuntimeError(
             f"jct.csv at {csv_path}: JCT cell '{parts[1]}' is not numeric"
@@ -119,7 +124,7 @@ def parse_jct_sec(csv_path) -> float:
 def run_astra(uuid: int, shape: Tuple[int, ...], tmp_root) -> float:
     """
     Materialize per-job inputs under <tmp_root>/<uuid>/inputs/, invoke
-    run_astra.sh, and return the parsed JCT in seconds.
+    run_astra.sh, and return the parsed JCT in nanoseconds.
 
     Raises subprocess.CalledProcessError if the container exits non-zero
     or RuntimeError if jct.csv is malformed/missing.
@@ -158,4 +163,4 @@ def run_astra(uuid: int, shape: Tuple[int, ...], tmp_root) -> float:
             )
             raise
 
-    return parse_jct_sec(outputs_dir / "jct.csv")
+    return parse_jct_nsec(outputs_dir / "jct.csv")

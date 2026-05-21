@@ -133,9 +133,9 @@ class ClusterManager:
             )
             return
         # Drive astra-sim for torus jobs before enqueueing so that
-        # job.astra_dur_sec is populated before any scheduler sees the
-        # job. Non-torus topologies (Clos, Mesh) have no fluid-model
-        # interpretation and are skipped.
+        # job.astra_ideal_dur_nsec is populated before any scheduler
+        # sees the job. Non-torus topologies (Clos, Mesh) have no
+        # fluid-model interpretation and are skipped.
         if job.topology in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
             self.contention_model.runAstraSim(job)
         self.new_job_queue.enqueue(job)

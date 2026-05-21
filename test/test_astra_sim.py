@@ -135,7 +135,7 @@ class TestWriteSchedule(unittest.TestCase):
         self.assertEqual(lines, ["BW 0", "0.0", "END"])
 
 
-class TestParseJctSec(unittest.TestCase):
+class TestParseJctNsec(unittest.TestCase):
 
     def setUp(self):
         import tempfile
@@ -159,38 +159,38 @@ class TestParseJctSec(unittest.TestCase):
             "jct.csv",
             "Job,JCT (nsec)\nJ0,1500000000\n",
         )
-        self.assertEqual(astra_sim.parse_jct_sec(p), 1.5)
+        self.assertEqual(astra_sim.parse_jct_nsec(p), 1500000000.0)
 
     def test_scientific_notation(self):
         p = self._write("jct.csv", "Job,JCT (nsec)\nJ0,1.5e9\n")
-        self.assertEqual(astra_sim.parse_jct_sec(p), 1.5)
+        self.assertEqual(astra_sim.parse_jct_nsec(p), 1.5e9)
 
     def test_takes_first_data_row_when_multiple_jobs(self):
         p = self._write(
             "jct.csv",
             "Job,JCT (nsec)\nJ0,2000000000\nJ1,3000000000\n",
         )
-        self.assertEqual(astra_sim.parse_jct_sec(p), 2.0)
+        self.assertEqual(astra_sim.parse_jct_nsec(p), 2000000000.0)
 
     def test_missing_file_raises(self):
         from pathlib import Path
         with self.assertRaises(RuntimeError):
-            astra_sim.parse_jct_sec(Path(self.tmpdir) / "nope.csv")
+            astra_sim.parse_jct_nsec(Path(self.tmpdir) / "nope.csv")
 
     def test_empty_file_raises(self):
         p = self._write("jct.csv", "")
         with self.assertRaises(RuntimeError):
-            astra_sim.parse_jct_sec(p)
+            astra_sim.parse_jct_nsec(p)
 
     def test_header_only_raises(self):
         p = self._write("jct.csv", "Job,JCT (nsec)\n")
         with self.assertRaises(RuntimeError):
-            astra_sim.parse_jct_sec(p)
+            astra_sim.parse_jct_nsec(p)
 
     def test_non_numeric_jct_raises(self):
         p = self._write("jct.csv", "Job,JCT (nsec)\nJ0,abc\n")
         with self.assertRaises(RuntimeError):
-            astra_sim.parse_jct_sec(p)
+            astra_sim.parse_jct_nsec(p)
 
 
 class TestRunAstra(unittest.TestCase):
@@ -225,12 +225,12 @@ class TestRunAstra(unittest.TestCase):
             return _R()
 
         with patch.object(astra_sim.subprocess, "run", side_effect=fake_run):
-            result_sec = astra_sim.run_astra(
+            result_nsec = astra_sim.run_astra(
                 uuid=42, shape=(2, 2, 1), tmp_root=tmp_root
             )
 
-        # JCT 2.5e9 ns -> 2.5 s.
-        self.assertEqual(result_sec, 2.5)
+        # jct.csv emits ns; run_astra passes it through unchanged.
+        self.assertEqual(result_nsec, 2500000000.0)
         # Inputs were written.
         uuid_dir = tmp_root / "42"
         self.assertTrue((uuid_dir / "inputs" / "bw_schedule.txt").exists())

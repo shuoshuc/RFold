@@ -174,12 +174,12 @@ class ContentionModel:
     def runAstraSim(self, job: Job) -> None:
         """
         Drive a fluid-model astra-sim run for `job` and write the
-        resulting JCT (in seconds) onto `job.astra_dur_sec`. Assumes
-        the caller has already restricted invocation to torus jobs;
-        coerces `job.shape` to a tuple of ints.
+        resulting JCT (in nanoseconds) onto `job.astra_ideal_dur_nsec`.
+        Assumes the caller has already restricted invocation to torus
+        jobs; coerces `job.shape` to a tuple of ints.
         """
         shape = tuple(int(s) for s in job.shape)
-        job.astra_dur_sec = astra_sim.run_astra(
+        job.astra_ideal_dur_nsec = astra_sim.run_astra(
             uuid=job.uuid,
             shape=shape,
             tmp_root=Path("./tmp"),
