@@ -46,7 +46,7 @@ docker run --rm \
   -v /host/path/to/schedules:/app/inputs:ro \
   -v /host/path/to/output:/app/output \
   rfold-astra \
-  bash /app/astra-sim-artifacts/examples/fluid-model/run.sh <JOB_SHAPE>
+  bash /app/astra-sim-artifacts/examples/fluid-model/run.sh <JOB_SHAPE> --mode mode2
 ```
 
 `<JOB_SHAPE>` is the torus shape in `XxYxZ` form (e.g., `2x2x1`).
