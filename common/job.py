@@ -67,6 +67,9 @@ class Job:
     # Job completion time duration (including queueing and other waiting time).
     jct_sec: Optional[float] = None
     # A ratio of JCT / job duration. 1 means no slowdown.
+    # TODO: slowdown for torus shape (1, 1, 1) is always 1.0 — a single
+    # rank has no inter-NPU communication and therefore no contention.
+    # There is never a need to invoke astra-sim to figure that out.
     slowdown: Optional[float] = None
     # Reason for last job rejection. Must be one of: "resource", "shape".
     reject_reason: Optional[str] = field(default=None, compare=False)

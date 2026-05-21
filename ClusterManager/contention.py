@@ -177,8 +177,18 @@ class ContentionModel:
         resulting JCT (in nanoseconds) onto `job.astra_ideal_dur_nsec`.
         Assumes the caller has already restricted invocation to torus
         jobs; coerces `job.shape` to a tuple of ints.
+
+        Single-NPU torus shapes (prod(shape) <= 1) are short-circuited
+        to a sentinel 1.0 ns without invoking astra-sim. There is no
+        collective communication on a single rank, so the slowdown for
+        such jobs is always 1.0 — astra-sim cannot tell us anything
+        useful here, and its analytical backend rejects npus_count <= 1
+        anyway.
         """
         shape = tuple(int(s) for s in job.shape)
+        if math.prod(shape) <= 1:
+            job.astra_ideal_dur_nsec = 1.0
+            return
         job.astra_ideal_dur_nsec = astra_sim.run_astra(
             uuid=job.uuid,
             shape=shape,

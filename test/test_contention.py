@@ -698,6 +698,24 @@ class TestRunAstraSim(unittest.TestCase):
             self.cm.runAstraSim(job)
         self.assertEqual(mock_run.call_args.kwargs["shape"], (2, 2))
 
+    def test_run_astra_sim_short_circuits_single_npu_shape(self):
+        # astra-sim's analytical backend rejects npus_count <= 1, and a
+        # single-rank torus has no collective communication to simulate.
+        job = Job(
+            uuid=55,
+            topology=TopoType.T3D_NT,
+            shape=(1, 1, 1),
+            size=1,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        with patch(
+            "ClusterManager.contention.astra_sim.run_astra",
+        ) as mock_run:
+            self.cm.runAstraSim(job)
+        mock_run.assert_not_called()
+        self.assertEqual(job.astra_ideal_dur_nsec, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
