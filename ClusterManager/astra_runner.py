@@ -104,7 +104,7 @@ class AstraSimRunner:
             raise
         wall_ms = (time.monotonic() - t0) * 1000.0
         logging.info(
-            "astra_runner batch: n=%d wall_ms=%.1f", len(specs), wall_ms
+            "astra_runner batch: impacted=%d wall_ms=%.1f", len(specs), wall_ms
         )
         return results
 
