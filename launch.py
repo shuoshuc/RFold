@@ -114,7 +114,7 @@ if __name__ == "__main__":
     logger = logging.getLogger()
     handler = logging.StreamHandler()
     formatter = PrettyForm(
-        fmt="{module: <40} {message}",
+        fmt="{module:<50.50} {message}",
         style="{",
     )
     logger.setLevel(lvl)
