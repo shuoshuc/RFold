@@ -119,9 +119,10 @@ class ContentionModel:
         """
         Compute per-job slowdown factors. For an impacted torus job whose
         astra_ideal_dur_nsec and astra_real_dur_nsec are both set,
-        factor = real / ideal. For jobs where either field is missing
-        or ideal is zero (non-torus, never-computed, or degenerate),
-        factor = 1.0.
+        factor = max(1.0, real / ideal) — contention can only slow jobs
+        down, so sub-1.0 ratios (FP noise) are clamped. For jobs where
+        either field is missing or ideal is zero (non-torus, never-computed,
+        or degenerate), factor = 1.0.
         """
         factors: dict[int, float] = {}
         for job in impacted_jobs:
@@ -130,7 +131,7 @@ class ContentionModel:
             if ideal is None or real is None or ideal <= 0:
                 factors[job.uuid] = 1.0
             else:
-                factors[job.uuid] = real / ideal
+                factors[job.uuid] = max(1.0, real / ideal)
         return factors
 
     def onAdmit(self, admitted_job: Job, running_jobs: Iterable[Job]) -> None:
