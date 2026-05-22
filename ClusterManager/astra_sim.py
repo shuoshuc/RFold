@@ -156,6 +156,9 @@ def run_astra(
         "--input-dir", str(inputs_dir),
         "--output-dir", str(outputs_dir),
     ]
+    # Redirect container output (STG progress, astra-sim statistics) to
+    # per-job log files so the RFold log stays clean. The files survive
+    # for post-mortem inspection.
     log_stdout = outputs_dir / "astra_sim.log"
     log_stderr = outputs_dir / "astra_sim.err"
     with open(log_stdout, "w") as fout, open(log_stderr, "w") as ferr:
