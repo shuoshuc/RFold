@@ -755,5 +755,91 @@ class TestMatricesFromMinTopology(unittest.TestCase):
         self.assertEqual(lt[1][2], 200.0)
 
 
+class TestApplyToImpactedRealJct(unittest.TestCase):
+    """Behavior of _applyToImpacted's new real-JCT batch dispatch."""
+
+    def setUp(self):
+        from unittest.mock import MagicMock
+        from ClusterManager.astra_runner import AstraSimRunner
+        self.env = simpy.Environment()
+        self.mock_cluster = MagicMock(spec=Cluster)
+        # Empty MinTopology for every impacted job — _matrices_from_min_topology
+        # produces zero matrices, which is fine because we mock runMany anyway.
+        self.mock_cluster.routeJobPaths.return_value = []
+        self.mock_runner = MagicMock(spec=AstraSimRunner)
+        self.cm = ContentionModel(self.env, self.mock_cluster, self.mock_runner)
+
+    def _torus_job(self, uuid, shape=(2, 2), size=4, ideal=100.0):
+        j = Job(
+            uuid=uuid,
+            topology=TopoType.T2D,
+            shape=shape,
+            size=size,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        j.astra_ideal_dur_nsec = ideal
+        return j
+
+    def _clos_job(self, uuid):
+        return Job(
+            uuid=uuid,
+            topology=TopoType.CLOS,
+            shape=(1,),
+            size=1,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+
+    def test_impacted_torus_jobs_get_astra_real_dur_nsec_populated(self):
+        ja = self._torus_job(uuid=1, ideal=100.0)
+        jb = self._torus_job(uuid=2, ideal=200.0)
+        self.mock_runner.runMany.return_value = {1: 150.0, 2: 200.0}
+        self.cm._applyToImpacted({ja, jb})
+        self.mock_runner.runMany.assert_called_once()
+        self.assertEqual(ja.astra_real_dur_nsec, 150.0)
+        self.assertEqual(jb.astra_real_dur_nsec, 200.0)
+
+    def test_non_torus_jobs_skipped_from_runMany(self):
+        torus = self._torus_job(uuid=1)
+        clos = self._clos_job(uuid=2)
+        self.mock_runner.runMany.return_value = {1: 110.0}
+        self.cm._applyToImpacted({torus, clos})
+        # Only the torus job appears in the dispatched specs.
+        specs_arg = self.mock_runner.runMany.call_args.args[0]
+        self.assertEqual([s.uuid for s in specs_arg], [1])
+        self.assertEqual(torus.astra_real_dur_nsec, 110.0)
+        self.assertIsNone(clos.astra_real_dur_nsec)
+
+    def test_single_npu_torus_short_circuits_without_dispatch(self):
+        # prod(shape) == 1: skip the runner; set real = ideal.
+        deg = self._torus_job(uuid=1, shape=(1, 1), size=1, ideal=1.0)
+        other = self._torus_job(uuid=2, ideal=100.0)
+        self.mock_runner.runMany.return_value = {2: 150.0}
+        self.cm._applyToImpacted({deg, other})
+        self.assertEqual(deg.astra_real_dur_nsec, 1.0)
+        self.assertEqual(other.astra_real_dur_nsec, 150.0)
+        # The degenerate job is not in the dispatched specs.
+        specs_arg = self.mock_runner.runMany.call_args.args[0]
+        self.assertEqual([s.uuid for s in specs_arg], [2])
+
+    def test_no_runMany_when_all_impacted_are_non_torus_or_degenerate(self):
+        clos = self._clos_job(uuid=1)
+        deg = self._torus_job(uuid=2, shape=(1, 1), size=1, ideal=1.0)
+        self.cm._applyToImpacted({clos, deg})
+        self.mock_runner.runMany.assert_not_called()
+
+    def test_real_less_than_ideal_logs_warning(self):
+        j = self._torus_job(uuid=1, ideal=100.0)
+        self.mock_runner.runMany.return_value = {1: 90.0}  # invariant violation
+        with self.assertLogs(level="WARNING") as cm:
+            self.cm._applyToImpacted({j})
+        self.assertTrue(
+            any("astra real (90" in msg and "ideal (100" in msg for msg in cm.output)
+        )
+        # Value is still written despite the warning.
+        self.assertEqual(j.astra_real_dur_nsec, 90.0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,7 @@ import simpy
 from dataclasses import dataclass
 from typing import Iterable
 
-from common.job import Job
+from common.job import Job, TopoType
 from Cluster.cluster import Cluster
 from ClusterManager import astra_sim
 from ClusterManager.astra_runner import AstraSimRunner, AstraJobSpec
@@ -152,24 +152,56 @@ class ContentionModel:
 
     def _applyToImpacted(self, impacted: set[Job]) -> None:
         """
-        Compute the min topology for each impacted job, call the pluggable
-        slowdown function, then push the new factor onto each impacted job
-        via Job.applySlowdown. Non-impacted jobs are intentionally left
-        untouched (their slowdown didn't change, so the next event that
-        touches them will accrue work correctly over the unchanged-factor
-        interval).
+        Compute the min topology for each impacted job, dispatch the
+        real-JCT astra-sim batch in parallel, then call the slowdown
+        function and push the new factor onto each impacted job via
+        Job.applySlowdown.
+
+        Single-NPU torus jobs (prod(shape) <= 1) short-circuit to
+        astra_real_dur_nsec = astra_ideal_dur_nsec without invoking
+        astra-sim. Non-torus jobs (Clos, Mesh) are skipped from the
+        dispatch but still go through slowdown (which returns 1.0 for
+        them).
         """
         if not impacted:
             return
         min_topos = {j.uuid: self.computeMinTopology(j) for j in impacted}
+
+        # Build the dispatch list for impacted torus jobs.
+        specs: list[AstraJobSpec] = []
+        for job in impacted:
+            if job.topology not in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
+                continue
+            shape = tuple(int(s) for s in job.shape)
+            if math.prod(shape) <= 1:
+                # No collective communication on a single rank; slowdown is 1.0.
+                job.astra_real_dur_nsec = job.astra_ideal_dur_nsec
+                continue
+            bw, lt = _matrices_from_min_topology(min_topos[job.uuid], int(job.size))
+            specs.append(AstraJobSpec(uuid=job.uuid, shape=shape, bw=bw, lt=lt))
+
+        if specs:
+            results = self.astra_runner.runMany(specs)
+            uuid_to_job = {j.uuid: j for j in impacted}
+            for uuid, real_nsec in results.items():
+                job = uuid_to_job[uuid]
+                ideal = job.astra_ideal_dur_nsec
+                if ideal is not None and real_nsec < ideal:
+                    logging.warning(
+                        f"astra real ({real_nsec}) < ideal ({ideal}) "
+                        f"for job {uuid}"
+                    )
+                job.astra_real_dur_nsec = real_nsec
+                logging.debug(
+                    f"t = {self.env.now}, Job {uuid} "
+                    f"real_ns={real_nsec} ideal_ns={ideal}"
+                )
+
         factors = self.slowdown(impacted, min_topos)
         for job in impacted:
             old_s = job.current_slowdown
             new_s = factors[job.uuid]
             job.applySlowdown(new_s, self.env.now)
-            # math.isclose avoids spurious log spam when a real (non-stub)
-            # slowdown function returns FP-derived factors that differ only
-            # in the last bit (e.g., 1.9999999999998 vs 2.0).
             if not math.isclose(old_s, new_s):
                 logging.debug(
                     f"t = {self.env.now}, Job {job.uuid} slowdown "

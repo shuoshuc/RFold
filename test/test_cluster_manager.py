@@ -377,8 +377,11 @@ class TestExecuteOnClusterRunsAstra(unittest.TestCase):
         self.env = simpy.Environment()
         self.mock_cluster = MagicMock(spec=Cluster)
         self.mock_cluster.routeJobPaths.side_effect = lambda job: iter([])
+        self.mock_runner = MagicMock(spec=AstraSimRunner)
+        self.mock_runner.runMany.return_value = {}
         self.mgr = ClusterManager(
-            self.env, cluster=self.mock_cluster, sim_njobs=0
+            self.env, cluster=self.mock_cluster, sim_njobs=0,
+            astra_runner=self.mock_runner,
         )
         FLAGS.args.defer_sched_sec = 600
 
