@@ -121,10 +121,21 @@ def parse_jct_nsec(csv_path) -> float:
         )
 
 
-def run_astra(uuid: int, shape: Tuple[int, ...], tmp_root) -> float:
+def run_astra(
+    uuid: int,
+    shape: Tuple[int, ...],
+    bw_matrix: list[list[float]],
+    lt_matrix: list[list[float]],
+    tmp_root,
+) -> float:
     """
     Materialize per-job inputs under <tmp_root>/<uuid>/inputs/, invoke
     run_astra.sh, and return the parsed JCT in nanoseconds.
+
+    The caller supplies BW (GB/s) and LT (ns) matrices; this function no
+    longer fabricates them from torus-neighbor defaults. Use
+    build_bw_matrix / build_lt_matrix if the ideal (no-contention) view
+    is what you want.
 
     Raises subprocess.CalledProcessError if the container exits non-zero
     or RuntimeError if jct.csv is malformed/missing.
@@ -136,10 +147,8 @@ def run_astra(uuid: int, shape: Tuple[int, ...], tmp_root) -> float:
     inputs_dir.mkdir(parents=True, exist_ok=True)
     outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    bw = build_bw_matrix(shape)
-    lt = build_lt_matrix(shape)
-    write_schedule(inputs_dir / "bw_schedule.txt", bw, "BW")
-    write_schedule(inputs_dir / "latency_schedule.txt", lt, "LT")
+    write_schedule(inputs_dir / "bw_schedule.txt", bw_matrix, "BW")
+    write_schedule(inputs_dir / "latency_schedule.txt", lt_matrix, "LT")
 
     shape_str = "x".join(str(s) for s in shape)
     cmd = [
@@ -147,9 +156,6 @@ def run_astra(uuid: int, shape: Tuple[int, ...], tmp_root) -> float:
         "--input-dir", str(inputs_dir),
         "--output-dir", str(outputs_dir),
     ]
-    # Redirect container output (STG progress, astra-sim statistics) to
-    # per-job log files so the RFold log stays clean. The files survive
-    # for post-mortem inspection.
     log_stdout = outputs_dir / "astra_sim.log"
     log_stderr = outputs_dir / "astra_sim.err"
     with open(log_stdout, "w") as fout, open(log_stderr, "w") as ferr:

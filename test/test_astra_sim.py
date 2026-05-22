@@ -226,7 +226,11 @@ class TestRunAstra(unittest.TestCase):
 
         with patch.object(astra_sim.subprocess, "run", side_effect=fake_run):
             result_nsec = astra_sim.run_astra(
-                uuid=42, shape=(2, 2, 1), tmp_root=tmp_root
+                uuid=42,
+                shape=(2, 2, 1),
+                bw_matrix=astra_sim.build_bw_matrix((2, 2, 1)),
+                lt_matrix=astra_sim.build_lt_matrix((2, 2, 1)),
+                tmp_root=tmp_root,
             )
 
         # jct.csv emits ns; run_astra passes it through unchanged.
@@ -253,8 +257,51 @@ class TestRunAstra(unittest.TestCase):
         with patch.object(astra_sim.subprocess, "run", side_effect=fake_run):
             with self.assertRaises(sp.CalledProcessError):
                 astra_sim.run_astra(
-                    uuid=7, shape=(2,), tmp_root=Path(self.tmpdir)
+                    uuid=7,
+                    shape=(2,),
+                    bw_matrix=astra_sim.build_bw_matrix((2,)),
+                    lt_matrix=astra_sim.build_lt_matrix((2,)),
+                    tmp_root=Path(self.tmpdir),
                 )
+
+
+    def test_run_astra_uses_caller_provided_matrices(self):
+        """run_astra writes the caller's BW/LT cells, not torus-neighbor defaults."""
+        from pathlib import Path
+        from unittest.mock import patch
+
+        tmp_root = Path(self.tmpdir)
+        # 2-NPU matrices distinguishable from any default the function might fabricate.
+        bw = [[0.0, 7.0], [7.0, 0.0]]
+        lt = [[0.0, 13.0], [13.0, 0.0]]
+
+        def fake_run(cmd, **kwargs):
+            out_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            (out_dir / "jct.csv").write_text("Job,JCT (nsec)\nJ0,1000\n")
+            class _R:
+                returncode = 0
+            return _R()
+
+        with patch.object(astra_sim.subprocess, "run", side_effect=fake_run):
+            result_nsec = astra_sim.run_astra(
+                uuid=11,
+                shape=(2,),
+                bw_matrix=bw,
+                lt_matrix=lt,
+                tmp_root=tmp_root,
+            )
+
+        self.assertEqual(result_nsec, 1000.0)
+        bw_lines = (tmp_root / "11" / "inputs" / "bw_schedule.txt").read_text().splitlines()
+        # tag + 2 rows + END
+        self.assertEqual(bw_lines[0], "BW 0")
+        self.assertEqual(bw_lines[-1], "END")
+        # Row 0 cells reflect the caller-provided BW (7.0), not 50.0.
+        self.assertIn("7.0", bw_lines[1])
+        self.assertNotIn("50.0", bw_lines[1])
+        lt_lines = (tmp_root / "11" / "inputs" / "latency_schedule.txt").read_text().splitlines()
+        self.assertIn("13.0", lt_lines[1])
+        self.assertNotIn("500.0", lt_lines[1])
 
 
 if __name__ == "__main__":
