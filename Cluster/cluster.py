@@ -150,7 +150,7 @@ class Cluster:
         always succeed execution, because the scheduler admits the job only when it can
         successfully start.
         """
-        logging.info(f"t = {self.env.now}, executing job {job.short_print()}")
+        logging.info(f"t = {int(self.env.now):.1f}, executing job {job.short_print()}")
         if not job.allocation:
             raise ValueError(f"Job {job.uuid} allocation info is missing.")
         for entry in job.allocation.values():
@@ -161,7 +161,7 @@ class Cluster:
         """
         Handle a job's completion. Free up the resources allocated to the job.
         """
-        logging.info(f"t = {self.env.now}, job {job.short_print()} completed")
+        logging.info(f"t = {int(self.env.now):.1f}, job {job.short_print()} completed")
         # Decrement flows BEFORE freeing nodes: if decFlow raises on underflow,
         # node state stays intact so the operator can diagnose without double-freeing.
         self._updateJobLinkFlows(job, delta=-1)

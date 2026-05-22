@@ -135,12 +135,12 @@ class ClusterManager:
         new_work = self.totalNewWork()
         if new_work > self.closed_loop_threshold > 0:
             logging.debug(
-                f"t = {self.env.now}, total new work {new_work}, "
+                f"t = {int(self.env.now):.1f}, total new work {new_work}, "
                 f"dropping job: {job.short_print()}"
             )
             return
         self.new_job_queue.enqueue(job)
-        logging.debug(f"t = {self.env.now}, enqueued: {job.short_print()}")
+        logging.debug(f"t = {int(self.env.now):.1f}, enqueued: {job.short_print()}")
         if self.sim_njobs > 0:
             self.jobs_to_watch.append(job.uuid)
         self.event_arrival.trigger()
@@ -178,13 +178,13 @@ class ClusterManager:
                     yield self.event_running.signal()
             except simpy.Interrupt:
                 logging.warning(
-                    f"t = {self.env.now}, running queue guard unexpectedly interrupted."
+                    f"t = {int(self.env.now):.1f}, running queue guard unexpectedly interrupted."
                 )
                 continue
 
             job = self.running_job_queue.peek()
             if job is None:
-                logging.error(f"[ERROR] t = {self.env.now}, running job queue is empty.")
+                logging.error(f"[ERROR] t = {int(self.env.now):.1f}, running job queue is empty.")
                 continue
             self.next_completion = job.priority
             # Start the timer now that there is actually a running job. The process can
@@ -197,20 +197,20 @@ class ClusterManager:
                     self.jobs_to_watch.remove(job.uuid)
                     # Decrement the stop criteria tracker if a job completes successfully.
                     self.sim_njobs -= 1
-                logging.debug(f"t = {self.env.now}, {job.short_print()} completed")
+                logging.debug(f"t = {int(self.env.now):.1f}, {job.short_print()} completed")
                 self.completeOnCluster(job)
             except simpy.Interrupt:
                 # The timer was interrupted because the placement set changed
                 # (admit). The head of the running queue may now point to a
                 # different job, or the same job with a shifted ETA.
-                logging.debug(f"t = {self.env.now}, runningQueueGuard interrupted")
+                logging.debug(f"t = {int(self.env.now):.1f}, runningQueueGuard interrupted")
 
     def schedule(self) -> Generator[simpy.events.Event, None, None]:
         """
         Schedule received jobs. The main scheduling loop should not be blocking, except for
         (1) waiting for scheduling decision, (2) simulating necessary processing delay.
         """
-        logging.debug(f"t = {self.env.now}, cluster scheduling starts")
+        logging.debug(f"t = {int(self.env.now):.1f}, cluster scheduling starts")
         while True:
             # Wait until a new job arrives or fetch one that is already available.
             # Specific scheduling policies can decide which job to pick.
@@ -222,7 +222,7 @@ class ClusterManager:
             # than None. This is to distinguish fresh new jobs.
             job.sched_time_sec = float("-inf")
             logging.info(
-                f"t = {self.env.now}, schedule {job_to_sched.short_print()}, "
+                f"t = {int(self.env.now):.1f}, schedule {job_to_sched.short_print()}, "
                 f"decision: {SchedDecision(decision).name}"
             )
             if decision == SchedDecision.ADMIT:
@@ -252,19 +252,19 @@ class ClusterManager:
                     job.slowdown = float("inf")
                     self.job_stats[job.uuid] = job
                     logging.info(
-                        f"t = {self.env.now}, job shape exceeds torus dimension, skipping job {job.short_print()}"
+                        f"t = {int(self.env.now):.1f}, job shape exceeds torus dimension, skipping job {job.short_print()}"
                     )
                     continue
                 if len(self.running_job_queue) <= 0:
                     raise RuntimeError(
-                        f"t = {self.env.now}, cluster is empty, but job is rejected: "
+                        f"t = {int(self.env.now):.1f}, cluster is empty, but job is rejected: "
                         f"{job_to_sched.short_print()}"
                     )
             elif decision == SchedDecision.PREEMPT:
                 # TODO: replace with actual preemption
                 # Sleep for a short period to simulate job migration delay.
                 sleep = 4
-                logging.info(f"t = {self.env.now}, migration delay: {sleep} sec")
+                logging.info(f"t = {int(self.env.now):.1f}, migration delay: {sleep} sec")
                 yield self.env.timeout(sleep)
                 # Block until migration completes, and then execute on the cluster.
                 self.executeOnCluster(job_to_sched)
@@ -272,7 +272,7 @@ class ClusterManager:
                 # TODO: replace with actual reconfiguration
                 # Sleep for a short period to simulate reconfiguration delay.
                 sleep = 1
-                logging.info(f"t = {self.env.now}, reconfiguration delay: {sleep} sec")
+                logging.info(f"t = {int(self.env.now):.1f}, reconfiguration delay: {sleep} sec")
                 yield self.env.timeout(sleep)
                 # Block until reconfiguration completes, and then execute on the cluster.
                 self.executeOnCluster(job_to_sched)

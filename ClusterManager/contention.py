@@ -197,7 +197,7 @@ class ContentionModel:
                     )
                 job.astra_real_dur_nsec = real_nsec
                 logging.debug(
-                    f"t = {self.env.now}, Job {uuid} "
+                    f"t = {int(self.env.now):.1f}, Job {uuid} "
                     f"real_ns={real_nsec} ideal_ns={ideal}"
                 )
 
@@ -211,7 +211,7 @@ class ContentionModel:
             # in the last bit (e.g., 1.9999999999998 vs 2.0).
             if not math.isclose(old_s, new_s):
                 logging.debug(
-                    f"t = {self.env.now}, Job {job.uuid} slowdown "
+                    f"t = {int(self.env.now):.1f}, Job {job.uuid} slowdown "
                     f"{old_s} -> {new_s}, new ETA {job.priority}"
                 )
 
