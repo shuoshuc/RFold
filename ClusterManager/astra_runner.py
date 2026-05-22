@@ -103,7 +103,7 @@ class AstraSimRunner:
                 pending.cancel()
             raise
         wall_ms = (time.monotonic() - t0) * 1000.0
-        logging.info(
+        logging.debug(
             "astra_runner batch: impacted=%d wall_ms=%.1f", len(specs), wall_ms
         )
         return results

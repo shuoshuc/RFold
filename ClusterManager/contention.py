@@ -190,15 +190,10 @@ class ContentionModel:
             for uuid, real_nsec in results.items():
                 job = uuid_to_job[uuid]
                 ideal = job.astra_ideal_dur_nsec
-                if ideal is not None and real_nsec < ideal:
-                    logging.warning(
-                        f"astra real ({real_nsec}) < ideal ({ideal}) "
-                        f"for job {uuid}"
-                    )
                 job.astra_real_dur_nsec = real_nsec
                 logging.debug(
-                    f"t = {int(self.env.now):.1f}, Job {uuid} "
-                    f"real_ns={real_nsec} ideal_ns={ideal}"
+                    f"t = {int(self.env.now)}, Job {uuid} "
+                    f"real_ns={int(real_nsec)} ideal_ns={int(ideal) if ideal is not None else None}"
                 )
 
         factors = self.slowdown(impacted, min_topos)
@@ -211,7 +206,7 @@ class ContentionModel:
             # in the last bit (e.g., 1.9999999999998 vs 2.0).
             if not math.isclose(old_s, new_s):
                 logging.debug(
-                    f"t = {int(self.env.now):.1f}, Job {job.uuid} slowdown "
+                    f"t = {int(self.env.now)}, Job {job.uuid} slowdown "
                     f"{old_s} -> {new_s}, new ETA {job.priority}"
                 )
 
