@@ -6,6 +6,7 @@ from unittest.mock import patch, call, MagicMock
 from common.flags import FLAGS
 from common.job import Job, TopoType
 from Cluster.cluster import Cluster
+from ClusterManager.astra_runner import AstraSimRunner
 from ClusterManager.manager import ClusterManager
 from ClusterManager.scheduling import SchedDecision
 
@@ -445,9 +446,6 @@ class TestExecuteOnClusterRunsAstra(unittest.TestCase):
 
 class TestClusterManagerShutdown(unittest.TestCase):
     def test_shutdown_invokes_runner_shutdown(self):
-        from unittest.mock import MagicMock
-        from ClusterManager.astra_runner import AstraSimRunner
-
         env = simpy.Environment()
         cluster = MagicMock(spec=Cluster)
         mock_runner = MagicMock(spec=AstraSimRunner)

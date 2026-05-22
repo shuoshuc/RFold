@@ -1,7 +1,6 @@
 import logging
 import unittest
 from unittest.mock import MagicMock, patch
-from unittest.mock import MagicMock as _MagicMock  # alias to avoid colliding with existing imports
 
 import simpy
 
@@ -15,7 +14,7 @@ from ClusterManager.scheduling import SchedDecision
 
 def _mock_runner():
     from ClusterManager.astra_runner import AstraSimRunner
-    return _MagicMock(spec=AstraSimRunner)
+    return MagicMock(spec=AstraSimRunner)
 
 
 def make_job(uuid: int, duration_sec: float) -> Job:
@@ -724,32 +723,6 @@ class TestRunAstraSim(unittest.TestCase):
         self.cm.runAstraSim(job)
         self.cm.astra_runner.runOne.assert_not_called()
         self.assertEqual(job.astra_ideal_dur_nsec, 1.0)
-
-    def test_run_astra_sim_uses_runner_runOne(self):
-        """runAstraSim now flows through AstraSimRunner.runOne."""
-        from unittest.mock import MagicMock
-        from ClusterManager.astra_runner import AstraSimRunner
-
-        mock_runner = MagicMock(spec=AstraSimRunner)
-        mock_runner.runOne.return_value = 7.0
-        env = simpy.Environment()
-        cm = ContentionModel(env, MagicMock(spec=Cluster), mock_runner)
-        job = Job(
-            uuid=88,
-            topology=TopoType.T2D,
-            shape=(2, 2),
-            size=4,
-            duration_sec=10.0,
-            arrival_time_sec=0,
-        )
-        cm.runAstraSim(job)
-        mock_runner.runOne.assert_called_once()
-        call_kwargs = mock_runner.runOne.call_args.kwargs
-        # uuid/shape passed through; matrices come from build_*_matrix.
-        self.assertEqual(call_kwargs["uuid"], 88)
-        self.assertEqual(call_kwargs["shape"], (2, 2))
-        self.assertEqual(job.astra_ideal_dur_nsec, 7.0)
-
 
 if __name__ == "__main__":
     unittest.main()

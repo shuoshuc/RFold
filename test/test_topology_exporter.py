@@ -9,6 +9,7 @@ import simpy
 from common.job import Job, TopoType
 from common.utils import spec_parser
 from Cluster.cluster import Cluster
+from ClusterManager.astra_runner import AstraSimRunner
 from ClusterManager.contention import ContentionModel
 from ClusterManager.topology_exporter import TopologyExporter
 
@@ -37,7 +38,7 @@ class TestTopologyExporterSkip(unittest.TestCase):
     def setUp(self):
         self.env = simpy.Environment()
         self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
-        self.model = ContentionModel(self.env, self.cluster, MagicMock())
+        self.model = ContentionModel(self.env, self.cluster, MagicMock(spec=AstraSimRunner))
         self.tmpdir = tempfile.mkdtemp(prefix="topo_export_test_")
         self.exporter = TopologyExporter(self.model, self.tmpdir)
 
@@ -70,7 +71,7 @@ class TestTopologyExporterFormat(unittest.TestCase):
     def setUp(self):
         self.env = simpy.Environment()
         self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
-        self.model = ContentionModel(self.env, self.cluster, MagicMock())
+        self.model = ContentionModel(self.env, self.cluster, MagicMock(spec=AstraSimRunner))
         self.tmpdir = tempfile.mkdtemp(prefix="topo_export_test_")
         self.exporter = TopologyExporter(self.model, self.tmpdir)
         # Capture cluster's uniform per-link speed + latency (c1.json values).
@@ -135,7 +136,7 @@ class TestTopologyExporterContention(unittest.TestCase):
     def setUp(self):
         self.env = simpy.Environment()
         self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
-        self.model = ContentionModel(self.env, self.cluster, MagicMock())
+        self.model = ContentionModel(self.env, self.cluster, MagicMock(spec=AstraSimRunner))
         self.tmpdir = tempfile.mkdtemp(prefix="topo_export_test_")
         self.exporter = TopologyExporter(self.model, self.tmpdir)
         sample_link = next(iter(self.cluster.links.values()))
@@ -177,7 +178,7 @@ class TestTopologyExporterFileOps(unittest.TestCase):
     def setUp(self):
         self.env = simpy.Environment()
         self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
-        self.model = ContentionModel(self.env, self.cluster, MagicMock())
+        self.model = ContentionModel(self.env, self.cluster, MagicMock(spec=AstraSimRunner))
         self.tmpdir = tempfile.mkdtemp(prefix="topo_export_test_")
 
     def tearDown(self):

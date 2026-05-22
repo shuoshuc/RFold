@@ -1,5 +1,6 @@
 import bisect
 import logging
+from pathlib import Path
 import simpy
 from Cluster.cluster import Cluster
 from typing import Generator, Optional
@@ -75,7 +76,6 @@ class ClusterManager:
         self.cluster = cluster
         # Own the astra-sim process pool for the whole simulation.
         if astra_runner is None:
-            from pathlib import Path
             astra_runner = AstraSimRunner(tmp_root=Path("./tmp"))
         self.astra_runner = astra_runner
         # The scheduling policy module makes scheduling decisions given the
