@@ -117,18 +117,21 @@ class ContentionModel:
         min_topologies: dict[int, MinTopology],
     ) -> dict[int, float]:
         """
-        Pluggable slowdown function. Inputs:
-          - impacted_jobs: the subset of running jobs whose contention state
-            just changed (share a link with the triggering job; includes the
-            admitted job for admit events).
-          - min_topologies: {job.uuid: MinTopology} for every impacted job.
-            Each MinTopoEdge carries effective bandwidth and cumulative
-            latency for one comm-pattern pair.
-        Returns: {job.uuid: factor}. Factor >= 1.0 means slower; 1.0 means
-        no contention. Identity stub by default; does NOT consume
-        min_topologies in this revision.
+        Compute per-job slowdown factors. For an impacted torus job whose
+        astra_ideal_dur_nsec and astra_real_dur_nsec are both set,
+        factor = real / ideal. For jobs where either field is missing
+        or ideal is zero (non-torus, never-computed, or degenerate),
+        factor = 1.0.
         """
-        return {job.uuid: 1.0 for job in impacted_jobs}
+        factors: dict[int, float] = {}
+        for job in impacted_jobs:
+            ideal = job.astra_ideal_dur_nsec
+            real = job.astra_real_dur_nsec
+            if ideal is None or real is None or ideal <= 0:
+                factors[job.uuid] = 1.0
+            else:
+                factors[job.uuid] = real / ideal
+        return factors
 
     def onAdmit(self, admitted_job: Job, running_jobs: Iterable[Job]) -> None:
         """

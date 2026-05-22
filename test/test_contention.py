@@ -841,5 +841,55 @@ class TestApplyToImpactedRealJct(unittest.TestCase):
         self.assertEqual(j.astra_real_dur_nsec, 90.0)
 
 
+class TestSlowdownFromAstra(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import MagicMock
+        from ClusterManager.astra_runner import AstraSimRunner
+        self.env = simpy.Environment()
+        self.cluster = MagicMock(spec=Cluster)
+        self.runner = MagicMock(spec=AstraSimRunner)
+        self.cm = ContentionModel(self.env, self.cluster, self.runner)
+
+    def _job(self, uuid, topo, ideal=None, real=None, shape=(2, 2), size=4):
+        j = Job(
+            uuid=uuid,
+            topology=topo,
+            shape=shape,
+            size=size,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        j.astra_ideal_dur_nsec = ideal
+        j.astra_real_dur_nsec = real
+        return j
+
+    def test_returns_real_over_ideal_for_torus(self):
+        j = self._job(uuid=1, topo=TopoType.T2D, ideal=100.0, real=250.0)
+        factors = self.cm.slowdown({j}, {1: []})
+        self.assertEqual(factors[1], 2.5)
+
+    def test_returns_one_when_real_or_ideal_is_none(self):
+        j_no_real = self._job(uuid=1, topo=TopoType.T2D, ideal=100.0, real=None)
+        j_no_ideal = self._job(uuid=2, topo=TopoType.T2D, ideal=None, real=100.0)
+        factors = self.cm.slowdown({j_no_real, j_no_ideal}, {1: [], 2: []})
+        self.assertEqual(factors[1], 1.0)
+        self.assertEqual(factors[2], 1.0)
+
+    def test_returns_one_for_non_torus_jobs(self):
+        j = self._job(
+            uuid=3, topo=TopoType.CLOS, ideal=None, real=None,
+            shape=(1,), size=1,
+        )
+        factors = self.cm.slowdown({j}, {3: []})
+        self.assertEqual(factors[3], 1.0)
+
+    def test_returns_one_when_ideal_is_zero(self):
+        # Defensive: a zero ideal would mean an empty trace; falling back
+        # to 1.0 is safer than ZeroDivisionError.
+        j = self._job(uuid=4, topo=TopoType.T2D, ideal=0.0, real=10.0)
+        factors = self.cm.slowdown({j}, {4: []})
+        self.assertEqual(factors[4], 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
