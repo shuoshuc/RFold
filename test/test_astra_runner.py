@@ -1,3 +1,4 @@
+import shutil
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -35,7 +36,6 @@ class TestAstraSimRunnerSingleCall(unittest.TestCase):
 
     def tearDown(self):
         self.runner.shutdown()
-        import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_run_one_invokes_run_astra_with_caller_matrices(self):
@@ -65,7 +65,6 @@ class TestAstraSimRunnerBatch(unittest.TestCase):
 
     def tearDown(self):
         self.runner.shutdown()
-        import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_run_many_returns_uuid_to_ns_map(self):

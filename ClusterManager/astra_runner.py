@@ -15,7 +15,7 @@ import time
 from concurrent.futures import Executor, ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from ClusterManager import astra_sim
 
@@ -24,12 +24,14 @@ from ClusterManager import astra_sim
 class AstraJobSpec:
     """One unit of work for AstraSimRunner.runMany."""
     uuid: int
-    shape: tuple
-    bw: list
-    lt: list
+    shape: Tuple[int, ...]
+    bw: list[list[float]]
+    lt: list[list[float]]
 
 
 class AstraSimRunner:
+    """Process-pool-backed dispatcher for astra_sim.run_astra calls."""
+
     def __init__(
         self,
         tmp_root: Path,
@@ -54,9 +56,9 @@ class AstraSimRunner:
     def runOne(
         self,
         uuid: int,
-        shape: tuple,
-        bw: list,
-        lt: list,
+        shape: Tuple[int, ...],
+        bw: list[list[float]],
+        lt: list[list[float]],
     ) -> float:
         """Submit a single astra-sim job through the pool and block until
         it returns the parsed JCT in nanoseconds."""
@@ -70,10 +72,12 @@ class AstraSimRunner:
         )
         return future.result()
 
-    def runMany(self, specs: list) -> dict:
+    def runMany(self, specs: list[AstraJobSpec]) -> dict[int, float]:
         """Submit one future per spec to the pool; block until all
         complete; return {uuid: jct_nsec}. Re-raises the first worker
-        exception encountered; remaining pending futures are cancelled.
+        exception encountered. On failure, attempts to cancel any
+        not-yet-started futures (running futures will complete in the
+        background; teardown is shutdown()'s job).
         """
         if not specs:
             return {}
