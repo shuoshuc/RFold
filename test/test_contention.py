@@ -698,6 +698,28 @@ class TestRunAstraSim(unittest.TestCase):
             self.cm.runAstraSim(job)
         self.assertEqual(mock_run.call_args.kwargs["shape"], (2, 2))
 
+    def test_run_astra_sim_is_idempotent_when_field_already_set(self):
+        # If astra_ideal_dur_nsec is already populated, the simulator
+        # must not run a second time and the existing value must not
+        # be overwritten. Output is deterministic per (uuid, shape),
+        # so re-running is pure waste.
+        job = Job(
+            uuid=77,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        job.astra_ideal_dur_nsec = 123.0
+        with patch(
+            "ClusterManager.contention.astra_sim.run_astra",
+            return_value=999.0,
+        ) as mock_run:
+            self.cm.runAstraSim(job)
+        mock_run.assert_not_called()
+        self.assertEqual(job.astra_ideal_dur_nsec, 123.0)
+
     def test_run_astra_sim_short_circuits_single_npu_shape(self):
         # astra-sim's analytical backend rejects npus_count <= 1, and a
         # single-rank torus has no collective communication to simulate.

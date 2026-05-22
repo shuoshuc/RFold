@@ -178,6 +178,12 @@ class ContentionModel:
         Assumes the caller has already restricted invocation to torus
         jobs; coerces `job.shape` to a tuple of ints.
 
+        Idempotent: if `job.astra_ideal_dur_nsec` is already set (from
+        an earlier call), returns immediately without re-invoking the
+        simulator. astra-sim's output is deterministic per (uuid, shape)
+        and the simulation is expensive, so re-running for the same job
+        is pure waste.
+
         Single-NPU torus shapes (prod(shape) <= 1) are short-circuited
         to a sentinel 1.0 ns without invoking astra-sim. There is no
         collective communication on a single rank, so the slowdown for
@@ -185,6 +191,8 @@ class ContentionModel:
         useful here, and its analytical backend rejects npus_count <= 1
         anyway.
         """
+        if job.astra_ideal_dur_nsec is not None:
+            return
         shape = tuple(int(s) for s in job.shape)
         if math.prod(shape) <= 1:
             job.astra_ideal_dur_nsec = 1.0

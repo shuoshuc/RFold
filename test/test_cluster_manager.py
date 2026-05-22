@@ -370,11 +370,12 @@ class TestClusterManagerWithFcfs(unittest.TestCase):
             self.assertEqual(self.mgr.job_stats, {job1_sched.uuid: job1_sched})
 
 
-class TestSubmitJobRunsAstra(unittest.TestCase):
+class TestExecuteOnClusterRunsAstra(unittest.TestCase):
 
     def setUp(self):
         self.env = simpy.Environment()
         self.mock_cluster = MagicMock(spec=Cluster)
+        self.mock_cluster.routeJobPaths.side_effect = lambda job: iter([])
         self.mgr = ClusterManager(
             self.env, cluster=self.mock_cluster, sim_njobs=0
         )
@@ -400,35 +401,43 @@ class TestSubmitJobRunsAstra(unittest.TestCase):
             arrival_time_sec=0,
         )
 
-    def test_torus_job_triggers_run_astra_sim(self):
+    def test_submit_does_not_trigger_run_astra_sim(self):
+        # astra-sim is gated on admission, not submission, so that
+        # rejected jobs that retry from the queue don't repeatedly
+        # invoke the simulator.
         with patch.object(
             self.mgr.contention_model, "runAstraSim"
         ) as mock_run:
             self.mgr.submitJob(self._t2d_job())
-        mock_run.assert_called_once()
+        mock_run.assert_not_called()
 
-    def test_clos_job_does_not_trigger_run_astra_sim(self):
+    def test_admitted_torus_job_triggers_run_astra_sim(self):
+        job = self._t2d_job()
         with patch.object(
             self.mgr.contention_model, "runAstraSim"
         ) as mock_run:
-            self.mgr.submitJob(self._clos_job())
-        mock_run.assert_not_called()
+            self.mgr.executeOnCluster(job)
+        mock_run.assert_called_once_with(job)
 
-    def test_dropped_job_does_not_trigger_run_astra_sim(self):
-        # closed_loop_threshold gate fires before astra-sim.
-        self.mgr.closed_loop_threshold = 1e-9
-        # Pre-load new_job_queue with enough work to trip the gate.
-        big = Job(
-            uuid=0,
-            topology=TopoType.T2D,
-            shape=(2, 2),
-            size=4,
-            duration_sec=1e6,
-            arrival_time_sec=0,
-        )
-        self.mgr.new_job_queue.enqueue(big)
+    def test_admitted_clos_job_does_not_trigger_run_astra_sim(self):
         with patch.object(
             self.mgr.contention_model, "runAstraSim"
         ) as mock_run:
-            self.mgr.submitJob(self._t2d_job(uuid=3))
+            self.mgr.executeOnCluster(self._clos_job())
         mock_run.assert_not_called()
+
+    def test_admission_does_not_re_run_astra_sim_when_already_populated(self):
+        # If astra_ideal_dur_nsec is already set (e.g. from an earlier
+        # admission attempt or preempt/reconfigure path), the underlying
+        # astra-sim subprocess must not run a second time. runAstraSim
+        # may still be called as the dispatch point, but it must
+        # short-circuit on the field guard.
+        job = self._t2d_job()
+        job.astra_ideal_dur_nsec = 42.0
+        with patch(
+            "ClusterManager.contention.astra_sim.run_astra",
+        ) as mock_run:
+            self.mgr.executeOnCluster(job)
+        mock_run.assert_not_called()
+        # Sanity: the prior value is preserved, not overwritten.
+        self.assertEqual(job.astra_ideal_dur_nsec, 42.0)

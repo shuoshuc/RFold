@@ -132,12 +132,6 @@ class ClusterManager:
                 f"dropping job: {job.short_print()}"
             )
             return
-        # Drive astra-sim for torus jobs before enqueueing so that
-        # job.astra_ideal_dur_nsec is populated before any scheduler
-        # sees the job. Non-torus topologies (Clos, Mesh) have no
-        # fluid-model interpretation and are skipped.
-        if job.topology in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
-            self.contention_model.runAstraSim(job)
         self.new_job_queue.enqueue(job)
         logging.debug(f"t = {self.env.now}, enqueued: {job.short_print()}")
         if self.sim_njobs > 0:
@@ -293,6 +287,15 @@ class ClusterManager:
         other running job that shares a physical link with it (the placement set has
         just changed) and re-sort the running queue accordingly.
         """
+        # Drive astra-sim for torus jobs on admission so that
+        # job.astra_ideal_dur_nsec is populated before the contention
+        # model runs. Non-torus topologies (Clos, Mesh) have no
+        # fluid-model interpretation and are skipped. Gating on
+        # admission (rather than submission) avoids re-running astra-sim
+        # for rejected jobs that retry from the queue; runAstraSim
+        # itself is idempotent if the field is already set.
+        if job.topology in (TopoType.T2D, TopoType.T3D_NT, TopoType.T3D_T):
+            self.contention_model.runAstraSim(job)
         # Scheduled time = time when the job is executed.
         job.updateQueueingTime(self.env.now)
         # Initialize contention-tracking state for this brand-new running job.
