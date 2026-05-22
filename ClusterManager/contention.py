@@ -4,11 +4,10 @@ import simpy
 from dataclasses import dataclass
 from typing import Iterable
 
-from pathlib import Path
-
 from common.job import Job
 from Cluster.cluster import Cluster
 from ClusterManager import astra_sim
+from ClusterManager.astra_runner import AstraSimRunner, AstraJobSpec
 
 
 @dataclass(frozen=True)
@@ -39,9 +38,15 @@ class ContentionModel:
     no-op. Replace with a real model when ready.
     """
 
-    def __init__(self, env: simpy.core.Environment, cluster: Cluster):
+    def __init__(
+        self,
+        env: simpy.core.Environment,
+        cluster: Cluster,
+        astra_runner,
+    ):
         self.env = env
         self.cluster = cluster
+        self.astra_runner = astra_runner
 
     def computeMinTopology(self, job: Job) -> MinTopology:
         """
@@ -175,21 +180,11 @@ class ContentionModel:
         """
         Drive a fluid-model astra-sim run for `job` and write the
         resulting JCT (in nanoseconds) onto `job.astra_ideal_dur_nsec`.
-        Assumes the caller has already restricted invocation to torus
-        jobs; coerces `job.shape` to a tuple of ints.
 
-        Idempotent: if `job.astra_ideal_dur_nsec` is already set (from
-        an earlier call), returns immediately without re-invoking the
-        simulator. astra-sim's output is deterministic per (uuid, shape)
-        and the simulation is expensive, so re-running for the same job
-        is pure waste.
-
-        Single-NPU torus shapes (prod(shape) <= 1) are short-circuited
-        to a sentinel 1.0 ns without invoking astra-sim. There is no
-        collective communication on a single rank, so the slowdown for
-        such jobs is always 1.0 — astra-sim cannot tell us anything
-        useful here, and its analytical backend rejects npus_count <= 1
-        anyway.
+        Idempotent: if `job.astra_ideal_dur_nsec` is already set, returns
+        immediately. Single-NPU torus shapes (prod(shape) <= 1) are
+        short-circuited to 1.0 ns without invoking astra-sim (the
+        analytical backend rejects npus_count <= 1).
         """
         if job.astra_ideal_dur_nsec is not None:
             return
@@ -197,8 +192,8 @@ class ContentionModel:
         if math.prod(shape) <= 1:
             job.astra_ideal_dur_nsec = 1.0
             return
-        job.astra_ideal_dur_nsec = astra_sim.run_astra(
-            uuid=job.uuid,
-            shape=shape,
-            tmp_root=Path("./tmp"),
+        bw = astra_sim.build_bw_matrix(shape)
+        lt = astra_sim.build_lt_matrix(shape)
+        job.astra_ideal_dur_nsec = self.astra_runner.runOne(
+            uuid=job.uuid, shape=shape, bw=bw, lt=lt,
         )

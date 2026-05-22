@@ -441,3 +441,16 @@ class TestExecuteOnClusterRunsAstra(unittest.TestCase):
         mock_run.assert_not_called()
         # Sanity: the prior value is preserved, not overwritten.
         self.assertEqual(job.astra_ideal_dur_nsec, 42.0)
+
+
+class TestClusterManagerShutdown(unittest.TestCase):
+    def test_shutdown_invokes_runner_shutdown(self):
+        from unittest.mock import MagicMock
+        from ClusterManager.astra_runner import AstraSimRunner
+
+        env = simpy.Environment()
+        cluster = MagicMock(spec=Cluster)
+        mock_runner = MagicMock(spec=AstraSimRunner)
+        mgr = ClusterManager(env, cluster=cluster, sim_njobs=0, astra_runner=mock_runner)
+        mgr.shutdown()
+        mock_runner.shutdown.assert_called_once()

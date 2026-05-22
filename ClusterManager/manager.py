@@ -10,6 +10,7 @@ from common.utils import Signal
 from ClusterManager.scheduling import SchedulingPolicy, SchedDecision
 from ClusterManager.contention import ContentionModel
 from ClusterManager.topology_exporter import TopologyExporter
+from ClusterManager.astra_runner import AstraSimRunner
 
 
 class SortedList:
@@ -67,10 +68,16 @@ class ClusterManager:
         cluster: Cluster,
         sim_njobs: int,
         closed_loop_threshold: float = 0,
+        astra_runner: Optional[AstraSimRunner] = None,
     ):
         self.env = env
         # The cluster instance under management.
         self.cluster = cluster
+        # Own the astra-sim process pool for the whole simulation.
+        if astra_runner is None:
+            from pathlib import Path
+            astra_runner = AstraSimRunner(tmp_root=Path("./tmp"))
+        self.astra_runner = astra_runner
         # The scheduling policy module makes scheduling decisions given the
         # cluster state and a job.
         self.scheduler = SchedulingPolicy(env, cluster)
@@ -78,7 +85,7 @@ class ClusterManager:
         # (those sharing links with the triggering job) whenever the placement
         # set changes (job admitted or completed) and pushes new factors onto
         # each impacted Job via Job.applySlowdown.
-        self.contention_model = ContentionModel(env, cluster)
+        self.contention_model = ContentionModel(env, cluster, self.astra_runner)
         # Per-job effective-topology exporter. Gated by FLAGS.export_topology
         # so disabled runs pay zero overhead.
         self.exporter = (
@@ -389,6 +396,10 @@ class ClusterManager:
         self.running_job_queue.slist.clear()
         for j in items:
             self.running_job_queue.enqueue(j)
+
+    def shutdown(self) -> None:
+        """Release the astra-sim process pool. Idempotent."""
+        self.astra_runner.shutdown()
 
     def shouldGiveUp(self, job: Job) -> bool:
         """

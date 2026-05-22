@@ -1,6 +1,7 @@
 import logging
 import unittest
 from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock as _MagicMock  # alias to avoid colliding with existing imports
 
 import simpy
 
@@ -10,6 +11,11 @@ from Cluster.cluster import Cluster
 from ClusterManager.contention import ContentionModel, MinTopoEdge
 from ClusterManager.manager import ClusterManager
 from ClusterManager.scheduling import SchedDecision
+
+
+def _mock_runner():
+    from ClusterManager.astra_runner import AstraSimRunner
+    return _MagicMock(spec=AstraSimRunner)
 
 
 def make_job(uuid: int, duration_sec: float) -> Job:
@@ -124,7 +130,7 @@ class TestContentionModel(unittest.TestCase):
         # short-circuits to {triggering_job} on admit / set() on complete.
         self.cluster = MagicMock(spec=Cluster)
         self.cluster.routeJobPaths.side_effect = lambda job: iter([])
-        self.model = ContentionModel(self.env, self.cluster)
+        self.model = ContentionModel(self.env, self.cluster, _mock_runner())
 
     def test_identity_returns_one_for_all_impacted(self):
         """The default slowdown stub returns 1.0 for every impacted job."""
@@ -149,7 +155,7 @@ class TestContentionModel(unittest.TestCase):
             def slowdown(self, impacted_jobs, min_topologies):
                 return {j.uuid: 2.0 for j in impacted_jobs}
 
-        model = TwoXModel(self.env, self.cluster)
+        model = TwoXModel(self.env, self.cluster, _mock_runner())
         admitted = make_job(uuid=1, duration_sec=10)
 
         # First admit: 1.0 -> 2.0, expect a debug log.
@@ -177,8 +183,8 @@ class TestContentionModel(unittest.TestCase):
         math.isclose to the prior value, no debug log fires."""
 
         class JitterModel(ContentionModel):
-            def __init__(self, env, cluster):
-                super().__init__(env, cluster)
+            def __init__(self, env, cluster, astra_runner):
+                super().__init__(env, cluster, astra_runner)
                 self.calls = 0
 
             def slowdown(self, impacted_jobs, min_topologies):
@@ -186,7 +192,7 @@ class TestContentionModel(unittest.TestCase):
                 factor = 2.0 if self.calls == 1 else 2.0 + 1e-15
                 return {j.uuid: factor for j in impacted_jobs}
 
-        model = JitterModel(self.env, self.cluster)
+        model = JitterModel(self.env, self.cluster, _mock_runner())
         admitted = make_job(uuid=1, duration_sec=10)
 
         # First admit: 1.0 -> 2.0, log fires.
@@ -283,7 +289,7 @@ class TestClusterManagerContention(unittest.TestCase):
         )
         # Total new work check uses closed_loop_threshold=0 (disabled).
         mgr = ClusterManager(env, cluster=mock_cluster, sim_njobs=len(jobs))
-        mgr.contention_model = model_cls(env, mock_cluster)
+        mgr.contention_model = model_cls(env, mock_cluster, _mock_runner())
 
         def feeder():
             for j in jobs:
@@ -414,7 +420,7 @@ class TestComputeMinTopology(unittest.TestCase):
     def setUp(self):
         self.env = simpy.Environment()
         self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
-        self.model = ContentionModel(self.env, self.cluster)
+        self.model = ContentionModel(self.env, self.cluster, _mock_runner())
         # Per-link latency is uniform from FLAGS.link_latency_ns (default 500.0).
         sample_link = next(iter(self.cluster.links.values()))
         self.link_speed_gbps = sample_link.speed_gbps
@@ -524,7 +530,7 @@ class TestFindImpactedJobs(unittest.TestCase):
     def setUp(self):
         self.env = simpy.Environment()
         self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
-        self.model = ContentionModel(self.env, self.cluster)
+        self.model = ContentionModel(self.env, self.cluster, _mock_runner())
 
     def test_disjoint_paths_admit_returns_only_trigger(self):
         """Two jobs on rows y=0 and y=2 share no links: impacted={trigger}."""
@@ -596,7 +602,7 @@ class TestOnAdmitOnComplete(unittest.TestCase):
     def setUp(self):
         self.env = simpy.Environment()
         self.cluster = Cluster(self.env, spec=spec_parser(C1_SPEC))
-        self.model = ContentionModel(self.env, self.cluster)
+        self.model = ContentionModel(self.env, self.cluster, _mock_runner())
 
     def test_disjoint_second_admit_does_not_touch_first_job(self):
         """Two jobs with disjoint paths: admitting the second job calls
@@ -657,7 +663,7 @@ class TestRunAstraSim(unittest.TestCase):
     def setUp(self):
         self.env = simpy.Environment()
         self.mock_cluster = MagicMock(spec=Cluster)
-        self.cm = ContentionModel(self.env, self.mock_cluster)
+        self.cm = ContentionModel(self.env, self.mock_cluster, _mock_runner())
 
     def test_run_astra_sim_sets_astra_ideal_dur_nsec(self):
         job = Job(
@@ -669,20 +675,15 @@ class TestRunAstraSim(unittest.TestCase):
             arrival_time_sec=0,
         )
         self.assertIsNone(job.astra_ideal_dur_nsec)
-        with patch(
-            "ClusterManager.contention.astra_sim.run_astra",
-            return_value=3.14,
-        ) as mock_run:
-            self.cm.runAstraSim(job)
-        mock_run.assert_called_once()
-        kwargs = mock_run.call_args.kwargs
+        self.cm.astra_runner.runOne.return_value = 3.14
+        self.cm.runAstraSim(job)
+        self.cm.astra_runner.runOne.assert_called_once()
+        kwargs = self.cm.astra_runner.runOne.call_args.kwargs
         self.assertEqual(kwargs["uuid"], 99)
         self.assertEqual(kwargs["shape"], (2, 2))
         self.assertEqual(job.astra_ideal_dur_nsec, 3.14)
 
     def test_run_astra_sim_coerces_float_shape_to_int(self):
-        # Job.shape is typed as Tuple[Union[float, int], ...]; for torus
-        # jobs we expect ints, but coerce defensively.
         job = Job(
             uuid=100,
             topology=TopoType.T2D,
@@ -691,18 +692,13 @@ class TestRunAstraSim(unittest.TestCase):
             duration_sec=10.0,
             arrival_time_sec=0,
         )
-        with patch(
-            "ClusterManager.contention.astra_sim.run_astra",
-            return_value=1.0,
-        ) as mock_run:
-            self.cm.runAstraSim(job)
-        self.assertEqual(mock_run.call_args.kwargs["shape"], (2, 2))
+        self.cm.astra_runner.runOne.return_value = 1.0
+        self.cm.runAstraSim(job)
+        self.assertEqual(
+            self.cm.astra_runner.runOne.call_args.kwargs["shape"], (2, 2)
+        )
 
     def test_run_astra_sim_is_idempotent_when_field_already_set(self):
-        # If astra_ideal_dur_nsec is already populated, the simulator
-        # must not run a second time and the existing value must not
-        # be overwritten. Output is deterministic per (uuid, shape),
-        # so re-running is pure waste.
         job = Job(
             uuid=77,
             topology=TopoType.T2D,
@@ -712,17 +708,11 @@ class TestRunAstraSim(unittest.TestCase):
             arrival_time_sec=0,
         )
         job.astra_ideal_dur_nsec = 123.0
-        with patch(
-            "ClusterManager.contention.astra_sim.run_astra",
-            return_value=999.0,
-        ) as mock_run:
-            self.cm.runAstraSim(job)
-        mock_run.assert_not_called()
+        self.cm.runAstraSim(job)
+        self.cm.astra_runner.runOne.assert_not_called()
         self.assertEqual(job.astra_ideal_dur_nsec, 123.0)
 
     def test_run_astra_sim_short_circuits_single_npu_shape(self):
-        # astra-sim's analytical backend rejects npus_count <= 1, and a
-        # single-rank torus has no collective communication to simulate.
         job = Job(
             uuid=55,
             topology=TopoType.T3D_NT,
@@ -731,12 +721,34 @@ class TestRunAstraSim(unittest.TestCase):
             duration_sec=10.0,
             arrival_time_sec=0,
         )
-        with patch(
-            "ClusterManager.contention.astra_sim.run_astra",
-        ) as mock_run:
-            self.cm.runAstraSim(job)
-        mock_run.assert_not_called()
+        self.cm.runAstraSim(job)
+        self.cm.astra_runner.runOne.assert_not_called()
         self.assertEqual(job.astra_ideal_dur_nsec, 1.0)
+
+    def test_run_astra_sim_uses_runner_runOne(self):
+        """runAstraSim now flows through AstraSimRunner.runOne."""
+        from unittest.mock import MagicMock
+        from ClusterManager.astra_runner import AstraSimRunner
+
+        mock_runner = MagicMock(spec=AstraSimRunner)
+        mock_runner.runOne.return_value = 7.0
+        env = simpy.Environment()
+        cm = ContentionModel(env, MagicMock(spec=Cluster), mock_runner)
+        job = Job(
+            uuid=88,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=10.0,
+            arrival_time_sec=0,
+        )
+        cm.runAstraSim(job)
+        mock_runner.runOne.assert_called_once()
+        call_kwargs = mock_runner.runOne.call_args.kwargs
+        # uuid/shape passed through; matrices come from build_*_matrix.
+        self.assertEqual(call_kwargs["uuid"], 88)
+        self.assertEqual(call_kwargs["shape"], (2, 2))
+        self.assertEqual(job.astra_ideal_dur_nsec, 7.0)
 
 
 if __name__ == "__main__":

@@ -85,6 +85,8 @@ def main():
     # form a sustained workload.
     if not FLAGS.replay_trace:
         mgr.flushAllQueues()
+    # Release the astra-sim process pool on every exit path.
+    mgr.shutdown()
 
     logging.info("----[Summary]-----")
     mgr.job_stats = dict(sorted(mgr.job_stats.items()))
