@@ -38,6 +38,7 @@ class Job:
     size: Union[float, int]
     duration_sec: Optional[float] = None
     astra_ideal_dur_nsec: Optional[float] = None
+    astra_real_dur_nsec: Optional[float] = None
     # ----- end of resource requirements -----
 
     # ----- allocation info -----

@@ -280,5 +280,30 @@ class TestJobCommPattern(unittest.TestCase):
         self.assertFalse(field_map["_comm_pattern"].compare)
 
 
+class TestAstraRealDurField(unittest.TestCase):
+    def test_astra_real_dur_nsec_defaults_to_none(self):
+        job = Job(
+            uuid=1,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=10.0,
+            arrival_time_sec=0.0,
+        )
+        self.assertIsNone(job.astra_real_dur_nsec)
+
+    def test_astra_real_dur_nsec_assignable(self):
+        job = Job(
+            uuid=2,
+            topology=TopoType.T2D,
+            shape=(2, 2),
+            size=4,
+            duration_sec=10.0,
+            arrival_time_sec=0.0,
+        )
+        job.astra_real_dur_nsec = 1234.5
+        self.assertEqual(job.astra_real_dur_nsec, 1234.5)
+
+
 if __name__ == "__main__":
     unittest.main()
