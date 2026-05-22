@@ -27,7 +27,7 @@ class Flags:
             "-n",
             "--sim_njobs",
             type=int,
-            default=1000,
+            default=100,
             help=("Stop the simulation after specified number of jobs have completed."),
         )
         self.parser.add_argument(
