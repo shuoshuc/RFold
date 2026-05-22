@@ -724,5 +724,36 @@ class TestRunAstraSim(unittest.TestCase):
         self.cm.astra_runner.runOne.assert_not_called()
         self.assertEqual(job.astra_ideal_dur_nsec, 1.0)
 
+class TestMatricesFromMinTopology(unittest.TestCase):
+    def test_empty_topology_returns_n_by_n_zeros(self):
+        from ClusterManager.contention import _matrices_from_min_topology
+        bw, lt = _matrices_from_min_topology([], n=3)
+        self.assertEqual(bw, [[0.0] * 3 for _ in range(3)])
+        self.assertEqual(lt, [[0.0] * 3 for _ in range(3)])
+
+    def test_bw_is_eff_gbps_divided_by_8(self):
+        from ClusterManager.contention import _matrices_from_min_topology, MinTopoEdge
+        topo = [MinTopoEdge(src_rank=0, dst_rank=1, eff_bw_gbps=80.0, eff_lat_ns=250.0)]
+        bw, lt = _matrices_from_min_topology(topo, n=2)
+        # 80 Gbps / 8 = 10 GB/s
+        self.assertEqual(bw[0][1], 10.0)
+        self.assertEqual(bw[1][0], 0.0)  # one-directional in MinTopology
+        self.assertEqual(lt[0][1], 250.0)
+        self.assertEqual(lt[1][0], 0.0)
+
+    def test_multiple_edges(self):
+        from ClusterManager.contention import _matrices_from_min_topology, MinTopoEdge
+        topo = [
+            MinTopoEdge(0, 1, 80.0, 100.0),
+            MinTopoEdge(1, 0, 80.0, 100.0),
+            MinTopoEdge(1, 2, 40.0, 200.0),
+        ]
+        bw, lt = _matrices_from_min_topology(topo, n=3)
+        self.assertEqual(bw[0][1], 10.0)
+        self.assertEqual(bw[1][0], 10.0)
+        self.assertEqual(bw[1][2], 5.0)
+        self.assertEqual(lt[1][2], 200.0)
+
+
 if __name__ == "__main__":
     unittest.main()

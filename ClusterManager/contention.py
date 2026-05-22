@@ -197,3 +197,24 @@ class ContentionModel:
         job.astra_ideal_dur_nsec = self.astra_runner.runOne(
             uuid=job.uuid, shape=shape, bw=bw, lt=lt,
         )
+
+
+def _matrices_from_min_topology(
+    topo: MinTopology, n: int
+) -> tuple[list[list[float]], list[list[float]]]:
+    """
+    Translate a MinTopology (one entry per comm-pattern edge) into the
+    N x N BW (GB/s) and LT (ns) matrices that astra-sim's fluid model
+    consumes. Mirrors TopologyExporter's conventions: eff_bw_gbps / 8
+    for BW; eff_lat_ns passed through unchanged.
+
+    Edges are directed; the matrices reflect each MinTopoEdge as a
+    single (src_rank, dst_rank) cell. Callers that need a symmetric
+    matrix should already have symmetric edges in `topo`.
+    """
+    bw = [[0.0] * n for _ in range(n)]
+    lt = [[0.0] * n for _ in range(n)]
+    for e in topo:
+        bw[e.src_rank][e.dst_rank] = e.eff_bw_gbps / 8.0
+        lt[e.src_rank][e.dst_rank] = e.eff_lat_ns
+    return bw, lt
